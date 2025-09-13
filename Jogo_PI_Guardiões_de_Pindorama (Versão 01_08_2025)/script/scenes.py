@@ -229,7 +229,7 @@ class Title(Scene):
         
         # Criação de objetos de fundo e outros elementos da tela
         self.bg = Obj("assets/menu/Fundo.png", [0, 0], [self.all_sprites], size=(1400, 850))
-        self.bg_mold = Obj("assets/menu/Moldura.png", [0, 0], [self.all_sprites])
+        self.bg_mold = Obj("assets/menu/Moldura_V2.png", [0, 0], [self.all_sprites])
         self.title = Obj("assets/menu/Titulo.png", [535, 50], [self.all_sprites], size=(700, 285))
         self.char1 = Obj("assets/menu/Indigena.png", [185, -10], [self.all_sprites], size=(450, 770))
         self.char2 = Obj("assets/menu/Bandeirantes.png", [12, 155], [self.all_sprites], size=(320, 575))
@@ -366,7 +366,7 @@ class Option(Scene):
             
         # Criação de objetos de fundo e outros elementos da tela
         self.bg = Obj("assets/menu/Fundo2.png", [0, 0], [self.all_sprites], size=(1280, 720))
-        self.bg_mold = Obj("assets/menu/Moldura.png", [0, 0], [self.all_sprites])
+        self.bg_mold = Obj("assets/menu/Moldura_V2.png", [0, 0], [self.all_sprites])
         self.title = Obj("assets/menu/Titulo.png", [50, 50], [self.all_sprites], size=(500, 210))
         self.text_options = Obj("assets/menu/Opcoes.png", [850, 65], [self.all_sprites], size=(350, 100))
  
@@ -509,129 +509,235 @@ class Control(Scene):
         """Desenha a tela de Game Over."""
         self.img.draw(surface)
         
-# Seleção de Personagem
 class Char_Select(Scene):
     """Classe para a tela de seleção de personagens."""
     
     def __init__(self):
         super().__init__()  # Chama o construtor da classe base
         
-        
         # Fundo e Moldura
         try:
             self.bg = Obj("assets/charSelect/Fundo2.png", [0, 0], [self.all_sprites])  # Fundo da seleção
-            self.bg_mold = Obj("assets/charSelect/Moldura.png", [-28, -20], [self.all_sprites], size=(1344, 756))  # Moldura da tela
+            self.bg_mold = Obj("assets/charSelect/Moldura_V3.png", [0, 0], [self.all_sprites], size=(1280, 720))  # Moldura da tela
         except pygame.error as e:
-            print(f"Erro ao carregar a imagem de fundo ou moldura: {e}")  # Exibe erro caso a imagem não carregue
+            print(f"Erro ao carregar a imagem de fundo ou moldura: {e}")
 
-        # Inicialização do cursor
+        # Cursor
         self.cursor_pos = [0, 0]  # Posição inicial [linha, coluna]
-        self.cursor = Obj("assets/charSelect/IndChar.png", [35, 45], [self.all_sprites], size=(203, 235))  # Imagem do cursor
-        self.cursor_choose = 0  # Índice do personagem selecionado
-                
-        # Local dos Status do Personagem
-        self.plate = Obj("assets/charSelect/placa.png", [733, 353], [self.all_sprites], size=(500, 310))  # Placa para status
+        self.cursor = Obj("assets/charSelect/IndChar.png", [21, 14], [self.all_sprites], size=(192, 247)) # Imagem do cursor
+        self.cursor_choose = 0 # Índice do personagem selecionado
         
-        # Estrutura de dados para armazenar informações dos personagens
+        # (Opcional) Placa antiga — se quiser usar, descomente
+        # self.plate = Obj("assets/charSelect/placa.png", [733, 353], [self.all_sprites], size=(500, 310))
+        
+        # Estrutura de dados para personagens (novo formato)
         self.characters = [
+            # NOVO FORMATO (exemplo)
             {
-                "image_selected": "assets/charSelect/Indígena_M_C.png",
-                "image_unselected": "assets/charSelect/Indígena_M_PB.png",
-                "pose": "assets/charSelect/Pose_Indigena1.png",
-                "position": [67, 82],
-                "pose_position": [320, 100],
-                "size_selected": (140, 178),
-                "size_unselected": (125, 159),
-                "pose_size": (469, 569),
-                "history": "assets/charSelect/Hist_IndM.png",
-                "status_image": "assets/charSelect/StatusInd.png"
+                "image_selected": "assets/charSelect/IM_C.png",
+                "position_img_sel": [48, 45],
+                "size_position_img_sel": (138, 193),
+
+                "image_unselected": "assets/charSelect/IM_PB.png",
+                "position_img_unsel": [57, 57],
+                "size_position_img_unsel": (120, 169),
+
+                "pose": "assets/charSelect/IM_P.png",
+                "position_pose": [251, 102],
+                "size_pose": (550, 550),
+
+                "description": "assets/charSelect/IM_D.png",
+                "position_desc": [660, 18],
+                "size_desc": (600, 372),
+
+                "status": "assets/charSelect/IM_S.png",
+                "position_status": [694, 381],
+                "size_status": (550, 300)
             },
             {
-                "image_selected": "assets/charSelect/Indígena_F_PB.png",
-                "image_unselected": "assets/charSelect/Indígena_F_PB.png",
-                "pose": "assets/charSelect/Pose_Indigena2.png",
-                "position": [217, 82],
-                "pose_position": [371, 140],
-                "size_selected": (140, 178),
-                "size_unselected": (125, 159),
-                "pose_size": (324, 535),
-                "history": "assets/charSelect/Hist_Block.png",
-                "status_image": "assets/charSelect/StatusOff.png"
+                "image_selected": "assets/charSelect/IF_C.png",
+                "position_img_sel": [190, 45],
+                "size_position_img_sel": (138, 193),
+
+                "image_unselected": "assets/charSelect/IF_PB.png",
+                "position_img_unsel": [199, 57],
+                "size_position_img_unsel": (120, 169),
+
+                "pose": "assets/charSelect/IF_P.png",
+                "position_pose": [251, 102],
+                "size_pose": (550, 550),
+
+                "description": "assets/charSelect/IF_D.png",
+                "position_desc": [660, 18],
+                "size_desc": (600, 372),
+
+                "status": "assets/charSelect/IF_S.png",
+                "position_status": [694, 381],
+                "size_status": (550, 300)
             },
             {
-                "image_selected": "assets/charSelect/Bandeirante_M_C.png",
-                "image_unselected": "assets/charSelect/Bandeirante_M_PB.png",
-                "pose": "assets/charSelect/Pose_Bandeirantes1.png",
-                "position": [67, 267],
-                "pose_position": [325, 120],
-                "size_selected": (140, 178),
-                "size_unselected": (125, 159),
-                "pose_size": (396, 553),
-                "history": "assets/charSelect/Hist_EurM.png",
-                "status_image": "assets/charSelect/StatusEur.png"
+                "image_selected": "assets/charSelect/EM_C.png",
+                "position_img_sel": [48, 268],
+                "size_position_img_sel": (138, 193),
+
+                "image_unselected": "assets/charSelect/EM_PB.png",
+                "position_img_unsel": [57, 280],
+                "size_position_img_unsel": (120, 169),
+
+                "pose": "assets/charSelect/EM_P.png",
+                "position_pose": [251, 102],
+                "size_pose": (550, 550),
+
+                "description": "assets/charSelect/EM_D.png",
+                "position_desc": [660, 18],
+                "size_desc": (600, 372),
+
+                "status": "assets/charSelect/EM_S.png",
+                "position_status": [694, 381],
+                "size_status": (550, 300)
             },
             {
-                "image_selected": "assets/charSelect/Bandeirante_F_PB.png",
-                "image_unselected": "assets/charSelect/Bandeirante_F_PB.png",
-                "pose": "assets/charSelect/Pose_Bandeirantes2.png",
-                "position": [217, 267],
-                "pose_position": [371, 120],
-                "size_selected": (140, 178),
-                "size_unselected": (125, 159),
-                "pose_size": (324, 550),
-                "history": "assets/charSelect/Hist_Block.png",
-                "status_image": "assets/charSelect/StatusOff.png"
+                "image_selected": "assets/charSelect/EF_C.png",
+                "position_img_sel": [190, 268],
+                "size_position_img_sel": (138, 193),
+
+                "image_unselected": "assets/charSelect/EF_PB.png",
+                "position_img_unsel": [199, 280],
+                "size_position_img_unsel": (120, 169),
+
+                "pose": "assets/charSelect/EF_P.png",
+                "position_pose": [251, 102],
+                "size_pose": (550, 550),
+
+                "description": "assets/charSelect/EF_D.png",
+                "position_desc": [660, 18],
+                "size_desc": (600, 372),
+
+                "status": "assets/charSelect/EF_S.png",
+                "position_status": [694, 381],
+                "size_status": (550, 300)
             },
             {
-                "image_selected": "assets/charSelect/Africano_M_C.png",
-                "image_unselected": "assets/charSelect/Africano_M_PB.png",
-                "pose": "assets/charSelect/Pose_Africano1.png",
-                "position": [67, 454],
-                "pose_position": [260, 110],
-                "size_selected": (140, 178),
-                "size_unselected": (125, 159),
-                "pose_size": (529, 567),
-                "history": "assets/charSelect/Hist_AfrM.png",
-                "status_image": "assets/charSelect/StatusAfr.png"
+                "image_selected": "assets/charSelect/AM_C.png",
+                "position_img_sel": [48, 487],
+                "size_position_img_sel": (138, 193),
+
+                "image_unselected": "assets/charSelect/AM_PB.png",
+                "position_img_unsel": [57, 499],
+                "size_position_img_unsel": (120, 169),
+
+                "pose": "assets/charSelect/AM_P.png",
+                "position_pose": [203, 102],
+                "size_pose": (550, 550),
+
+                "description": "assets/charSelect/AM_D.png",
+                "position_desc": [660, 18],
+                "size_desc": (600, 372),
+
+                "status": "assets/charSelect/AM_S.png",
+                "position_status": [694, 381],
+                "size_status": (550, 300)
             },
             {
-                "image_selected": "assets/charSelect/Africana_F_PB.png",
-                "image_unselected": "assets/charSelect/Africana_F_PB.png",
-                "pose": "assets/charSelect/Pose_Africano2.png",
-                "position": [217, 454],
-                "pose_position": [360, 85],
-                "size_selected": (140, 178),
-                "size_unselected": (125, 159),
-                "pose_size": (342, 588),
-                "history": "assets/charSelect/Hist_Block.png",
-                "status_image": "assets/charSelect/StatusOff.png"
+                "image_selected": "assets/charSelect/AF_C.png",
+                "position_img_sel": [190, 487],
+                "size_position_img_sel": (138, 193),
+
+                "image_unselected": "assets/charSelect/AF_PB.png",
+                "position_img_unsel": [199, 499],
+                "size_position_img_unsel": (120, 169),
+
+                "pose": "assets/charSelect/AF_P.png",
+                "position_pose": [251, 102],
+                "size_pose": (550, 550),
+
+                "description": "assets/charSelect/AF_D.png",
+                "position_desc": [660, 18],
+                "size_desc": (600, 372),
+
+                "status": "assets/charSelect/AF_S.png",
+                "position_status": [694, 381],
+                "size_status": (550, 300)
             },
         ]
-        
+
+        # Grupo separado só para as miniaturas (evita apagar fundo/moldura/cursor)
+        self.thumb_sprites = pygame.sprite.Group()
+
         # Carregar a imagem do primeiro personagem ao iniciar
         self.load_character(self.cursor_choose)
         
-        # Matriz de posições do cursor
+        # Matriz de posições do cursor (mantive a navegação 2x3 que você já usa)
         self.cursor_positions = [
-            [35, 45], [180, 45],
-            [35, 232], [180, 232],
-            [35, 420], [180, 420]
+            [21, 14], [163, 14],
+            [21, 235], [163, 235],
+            [21, 455], [163, 455]
         ]
 
-    def load_character(self, index):
-        """Carrega a imagem do personagem selecionado."""
-        # Limpa os sprites antigos antes de carregar novos
-        self.all_sprites.empty()
+    # -------------------- Helpers de compatibilidade --------------------
+    def _thumb_fields(self, character, selected):
+        """Retorna (img_path, pos, size) para a miniatura, compatível com os dois formatos."""
+        if selected:
+            # novo formato
+            path = character.get("image_selected")
+            pos  = character.get("position_img_sel")
+            size = character.get("size_position_img_sel")
+            # fallback antigo
+            if pos is None:
+                pos = character.get("position")
+            if size is None:
+                size = character.get("size_selected")
+        else:
+            path = character.get("image_unselected")
+            pos  = character.get("position_img_unsel")
+            size = character.get("size_position_img_unsel")
+            if pos is None:
+                pos = character.get("position")
+            if size is None:
+                size = character.get("size_unselected")
+        return path, pos, size
 
+    def _pose_fields(self, character):
+        """Retorna (img_path, pos, size) da pose, compatível com os dois formatos."""
+        path = character.get("pose")
+        pos  = character.get("position_pose", character.get("pose_position"))
+        size = character.get("size_pose", character.get("pose_size"))
+        return path, pos, size
+
+    def _desc_fields(self, character):
+        """Retorna (img_path, pos, size) da descrição/histórico, compatível com os dois formatos."""
+        path = character.get("description", character.get("history"))
+        # padrão antigo usava [740, 60] e (500, 290) no seu draw_history
+        pos  = character.get("position_desc", [740, 60])
+        size = character.get("size_desc", (500, 290))
+        return path, pos, size
+
+    def _status_fields(self, character):
+        """Retorna (img_path, pos, size) do status/placa de status, compatível com os dois formatos."""
+        path = character.get("status", character.get("status_image"))
+        # no seu draw_status_image: [760,380], (450,240)
+        pos  = character.get("position_status", [760, 380])
+        size = character.get("size_status", (450, 240))
+        return path, pos, size
+
+    # -------------------- Carregar sprites de miniaturas --------------------
+    def load_character(self, index):
+        """Recria APENAS as miniaturas conforme o personagem selecionado, mantendo fundo/moldura/cursor."""
+        # limpa somente as thumbs
+        for spr in list(self.thumb_sprites):
+            spr.kill()
+        self.thumb_sprites.empty()
+
+        # recria thumbs (selecionada e não selecionadas)
         for i, character in enumerate(self.characters):
             # Carregar a imagem destacada (selecionada) para o personagem ativo
-            if i == index:
-                Obj(character["image_selected"], character["position"], [self.all_sprites], size=character["size_selected"])
-                
-            else:
-                # Carregar a imagem não destacada (não selecionada)
-                Obj(character["image_unselected"], character["position"], [self.all_sprites], size=character["size_unselected"])
+            selected = (i == index)
+            img_path, pos, size = self._thumb_fields(character, selected)
+            if not img_path or not pos or not size:
+                continue
+            Obj(img_path, pos, [self.thumb_sprites], size=size)
 
+    # -------------------- Eventos --------------------
     def handle_events(self, event):
         """Gerencia eventos de entrada do usuário na tela de seleção de personagens."""
         if event.type == pygame.KEYDOWN:
@@ -672,44 +778,38 @@ class Char_Select(Scene):
                 self.cursor.rect.x = self.cursor_positions[self.cursor_choose][0]  # Atualiza a posição do cursor
                 self.load_character(self.cursor_choose)  # Carrega o personagem na nova posição
     
+    # -------------------- Draw --------------------
     def draw(self, screen):
         """Desenha a cena de seleção de personagens na tela."""
-               
-        # Desenhar primeiro o fundo
+        # 1) Fundo
         self.bg.draw(screen)
-        
-        # Desenha todos os personagens e seus status
-        super().draw(screen)  # Chama o método draw da classe pai
-        self.plate.draw(screen)  # Desenha a placa na tela
-        
-        # Desenhar a imagem de status do personagem
-        self.draw_status_image(screen, self.characters[self.cursor_choose]["status_image"])
-        
-        # Desenhar a imagem do histórico do personagem
-        self.draw_history(screen, self.characters[self.cursor_choose]["history"])
-        
-        # Desenha a pose do personagem atual na frente
-        current_character = self.characters[self.cursor_choose]
-        pose_image = Obj(current_character["pose"], current_character["pose_position"], [self.all_sprites], size=current_character["pose_size"])
-        pose_image.draw(screen)  # Desenha a pose na tela
 
-        # Desenha o cursor na tela
-        # Desenha o efeito de fade primeiro
+        # 2) Miniaturas
+        self.thumb_sprites.draw(screen)
+
+        # 3) Descrição
+        current = self.characters[self.cursor_choose]
+        desc_path, desc_pos, desc_size = self._desc_fields(current)
+        if desc_path and desc_pos and desc_size:
+            Obj(desc_path, desc_pos, [self.all_sprites], size=desc_size).draw(screen)
+
+        # 4) Status
+        status_path, status_pos, status_size = self._status_fields(current)
+        if status_path and status_pos and status_size:
+            Obj(status_path, status_pos, [self.all_sprites], size=status_size).draw(screen)
+
+        # 5) Cursor
         self.cursor.draw(screen)
-        self.bg_mold.draw(screen)  # Desenha a moldura sobre o fundo
-                
-    def draw_history(self, screen, history_image_path):
-        """Carrega e desenha a imagem do histórico do personagem na tela."""
-        
-        # Desenha o efeito de fade primeiro
-        status_image = Obj(history_image_path, [740, 60], [self.all_sprites], size=(500, 290))  # Ajuste o tamanho conforme necessário
-        status_image.draw(screen)  # Desenha a imagem de status na tela
-         
-    def draw_status_image(self, screen, status_image_path):
-        """Carrega e desenha a imagem de status do personagem na tela."""
-        # Desenha o efeito de fade primeiro
-        status_image = Obj(status_image_path, [760, 380], [self.all_sprites], size=(450, 240))  # Ajuste o tamanho conforme necessário
-        status_image.draw(screen)  # Desenha a imagem de status na tela
+
+        # 6) Moldura
+        self.bg_mold.draw(screen)
+
+        # 7) **POSE POR ÚLTIMO** (fica acima de tudo)
+        pose_path, pose_pos, pose_size = self._pose_fields(current)
+        if pose_path and pose_pos and pose_size:
+            Obj(pose_path, pose_pos, [self.all_sprites], size=pose_size).draw(screen)
+
+        pygame.display.update()
 
 
 # Criando Tela de Mapa
@@ -725,7 +825,7 @@ class Map(Scene):
             self.papiro = Obj("assets/mapSelect/00Papiro.png", [0, 0], [self.all_sprites], size=(1280, 720))  # Imagem do papiro
             self.bgMap = Obj("assets/mapSelect/02Mapa_NovaPindorama_Fundo.png", [0, 0], [self.all_sprites], size=(1280, 720))  # Fundo do mapa
             self.contMap = Obj("assets/mapSelect/01Mapa_NovaPindorama_Contorno.png", [0, 0], [self.all_sprites], size=(1280, 720))  # Contorno do mapa
-            self.bg_mold = Obj("assets/charSelect/Moldura.png", [-28, -20], [self.all_sprites], size=(1340, 753))  # Moldura da tela
+            self.bg_mold = Obj("assets/mapSelect/Moldura_V1.png", [0, 0], [self.all_sprites], size=(1280, 720))  # Moldura da tela
         except pygame.error as e:
             print(f"Erro ao carregar a imagem de fundo ou moldura: {e}")  # Exibe erro caso a imagem não carregue
 
@@ -890,10 +990,10 @@ class Map(Scene):
         self.papiro.draw(screen)  # Desenha a imagem do papiro
         self.bgMap.draw(screen)  # Desenha o fundo do mapa
         self.contMap.draw(screen)  # Desenha o contorno do mapa
-        self.bg_mold.draw(screen)  # Desenha a moldura da tela
         super().draw(screen)  # Chama o método da classe pai para desenhar o fundo
         self.load_area(self.cursor_choose)  # Carrega a área atual
         self.cursor.draw(screen)  # Desenha o cursor na tela
+        self.bg_mold.draw(screen)  # Desenha a moldura da tela
 
 
 # Criando Tela de Nível

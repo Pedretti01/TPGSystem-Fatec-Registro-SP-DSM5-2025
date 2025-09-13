@@ -383,9 +383,9 @@ class Player(Obj):
         self.gravity()  # Aplica a gravidade
                         
         # Se o personagem estiver no buraco, desabilita o movimento
-        if self.in_hole:
-            self.right = False
-            self.left = False
+        # if self.in_hole:
+        #     self.right = False
+        #     self.left = False
 
         # Se o personagem está atacando, ele não pode se mover
         if self.state != "shot":  # Só permite movimentação se não estiver atacando
