@@ -2,74 +2,314 @@ import pygame, sys, json  # Importa as bibliotecas necessárias
 import random
 from script.obj import *  # Importa todas as classes do módulo obj
 from script.setting import *  # Importa todas as configurações do módulo setting
+from script.layer_anim import LayerStack, StaticLayer, FlipLayer # Importa todas as configurações do módulo setting layer_anim
+
+
+# ====== PROGRESSO GLOBAL DO MUNDO ======
+# Quem lê/escreve: Level_1_2 (ao concluir) e Map (ao exibir bloqueios/ícones)
+WORLD_PROGRESS = {
+    "areas_done": set()   # ex.: {"Level_1_2", "Level_1_1"}
+}
+
 
 # Criando Classes para estruturar o Jogo:
 # Criando Cenas
+class Fade:
+    def __init__(self, color="black"):
+        self.color = color
+        self.alpha = 0
+        self.enabled = False
+
+    def update(self):
+        if self.enabled:
+            self.alpha = min(255, self.alpha + 5)
+
+    def draw(self, display):
+        if self.enabled and self.alpha > 0:
+            W, H = display.get_size()
+            #s = pygame.Surface((W, H), pygame.SRCALPHA)
+            #s.fill((0, 0, 0, self.alpha))
+            #display.blit(s, (0, 0))
+
+
+class PauseInventoryOverlay:
+    """
+    Overlay de pausa/inventário que desenha por cima da cena.
+    Opções:
+      - Retomar
+      - Escambo (Loja)
+      - Menu Inicial
+    """
+    def __init__(self, parent_scene, font, small_font, on_resume, on_shop, on_main_menu):
+        self.parent_scene = parent_scene
+        self.font = font
+        self.small_font = small_font
+        self.on_resume = on_resume
+        self.on_shop = on_shop
+        self.on_main_menu = on_main_menu
+
+        self.options = ["Retomar", "Escambo (Loja)", "Menu Inicial"]
+        self.selected = 0
+
+        # Visual
+        self.bg_alpha = 180  # opacidade do fundo escuro
+        W, H = self.parent_scene.display.get_size()
+        self.panel_width = int(W * 0.6)
+        self.panel_height = int(H * 0.65)
+
+        self.title_text = "Inventário & Pausa"
+        # Tenta usar a mesma fonte com tamanho menor; se falhar, usa default.
+        try:
+            # Se a cena usou um caminho de fonte custom, reaproveite:
+            self.small_font = pygame.font.Font(self.font.name, 24)  # type: ignore
+        except Exception:
+            self.small_font = pygame.font.Font(None, 24)
+
+        # Integração com inventário real (substitua por player.inventory se tiver)
+        self.inventory_items = self._read_inventory()
+
+    def _read_inventory(self):
+        # Placeholder: substitua pelo seu inventário real
+        return [
+            {"nome": "Poção de Cura", "qtd": 2},
+            {"nome": "Cogumelo de Energia", "qtd": 1},
+            {"nome": "Flecha de Taquara", "qtd": 18},
+            {"nome": "Moedas", "qtd": 37},
+        ]
+
+    def handle_events(self, event):
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_UP, pygame.K_w):
+                self.selected = (self.selected - 1) % len(self.options)
+                self.parent_scene.sound_click.play()
+            elif event.key in (pygame.K_DOWN, pygame.K_s):
+                self.selected = (self.selected + 1) % len(self.options)
+                self.parent_scene.sound_click.play()
+            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                self._activate_selected()
+            elif event.key == pygame.K_ESCAPE:
+                self.on_resume()
+                
+
+    def _activate_selected(self):
+        option = self.options[self.selected]
+        if option == "Retomar":
+            self.on_resume()
+        elif option == "Escambo (Loja)":
+            self.on_shop()
+        elif option == "Menu Inicial":
+            self.on_main_menu()
+
+    def update(self):
+        # espaço para animações futuras
+        pass
+
+    def draw(self, display):
+        W, H = display.get_size()
+
+        # Fundo escurecido semi-transparente
+        dim = pygame.Surface((W, H), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, self.bg_alpha))
+        display.blit(dim, (0, 0))
+
+        # Painel central
+        panel_rect = pygame.Rect(0, 0, self.panel_width, self.panel_height)
+        panel_rect.center = (W // 2, H // 2)
+        pygame.draw.rect(display, (30, 30, 30), panel_rect, border_radius=16)
+        pygame.draw.rect(display, (200, 200, 200), panel_rect, width=2, border_radius=16)
+
+        # Título
+        title_surf = self.font.render(self.title_text, True, (240, 240, 240))
+        title_rect = title_surf.get_rect(center=(panel_rect.centerx, panel_rect.top + 50))
+        display.blit(title_surf, title_rect)
+
+        # Colunas: à esquerda inventário, à direita opções
+        padding = 28
+        col_gap = 24
+
+        left_rect = pygame.Rect(
+            panel_rect.left + padding,
+            title_rect.bottom + 20,
+            int(self.panel_width * 0.55),
+            panel_rect.bottom - (title_rect.bottom + 20) - padding
+        )
+        right_rect = pygame.Rect(
+            left_rect.right + col_gap,
+            left_rect.top,
+            panel_rect.right - padding - (left_rect.right + col_gap),
+            left_rect.height
+        )
+
+        # Inventário (lista simples)
+        inv_title = self.small_font.render("Inventário", True, (210, 210, 210))
+        display.blit(inv_title, (left_rect.x, left_rect.y))
+        y = left_rect.y + 30
+        for item in self.inventory_items:
+            line = f"- {item['nome']} x{item['qtd']}"
+            line_surf = self.small_font.render(line, True, (230, 230, 230))
+            display.blit(line_surf, (left_rect.x + 8, y))
+            y += 26
+
+        # Opções
+        opt_title = self.small_font.render("Opções", True, (210, 210, 210))
+        display.blit(opt_title, (right_rect.x, right_rect.y))
+        y = right_rect.y + 36
+        for idx, opt in enumerate(self.options):
+            selected = (idx == self.selected)
+            color = (255, 255, 255) if selected else (200, 200, 200)
+            opt_surf = self.font.render(opt, True, color)
+            display.blit(opt_surf, (right_rect.x + 8, y))
+
+            if selected:
+                arrow = self.font.render("▶", True, color)
+                display.blit(arrow, (right_rect.x - 36, y))
+            y += 48
+
+
 class Scene:
     """Classe base para todas as cenas do jogo."""
     
     def __init__(self, font_path="assets/font/Primitive.ttf", font_size=36):
-        pygame.init()  # Certifique-se de que o Pygame esteja inicializado
+        pygame.init()
         
-        self.next = self  # Inicializa a próxima cena como a cena atual
-        self.display = pygame.display.get_surface()  # Obtém a superfície de exibição atual
-        self.all_sprites = pygame.sprite.Group()  # Cria um grupo de sprites
+        self.next = self                         # cena seguinte
+        self.display = pygame.display.get_surface()
+        self.all_sprites = pygame.sprite.Group()
         
-        self.fade = Fade("black")  # Cria um efeito de fade inicial
-        self.sound_click = pygame.mixer.Sound("assets/sounds/click.ogg")  # Carrega o som de clique
-        self.sound_click.set_volume(0.25)  # Ajusta o volume para 25%
+        self.fade = Fade("black")                # efeito de fade
+        self.sound_click = pygame.mixer.Sound("assets/sounds/click.ogg")
+        self.sound_click.set_volume(0.25)
         
-        self.option_data = self.load_file("teste.json")  # Carrega as opções do jogo de um arquivo JSON
-        
-        # Inicialização da fonte
-        self.font = pygame.font.Font(font_path, font_size)  # Define a fonte a ser utilizada
-        
-    def start_music(self):
-        """Inicia a música de fundo."""
-        loop = -1  # Loop infinito para a música
-        pygame.mixer.music.load("assets/sounds/music1.mp3")  # Carrega a música de fundo
-        
-        if self.option_data["music_set_volume"] != 0:                
-            pygame.mixer.music.play(loop)  # Toca a música
-            pygame.mixer.music.set_volume(self.option_data["music_set_volume"])  # Define o volume da música
+        self.option_data = self.load_file("teste.json")
+        self.font = pygame.font.Font(font_path, font_size)
 
-    # Identificando Eventos
+        # Controle de pausa/overlay
+        self.paused = False
+        self.overlay = None
+
+    # ====== MENU DE PAUSA / INVENTÁRIO ======
+    def open_pause_menu(self):
+        """Cria e exibe o overlay de pausa/inventário com robustez."""
+        try:
+            if self.overlay is not None:
+                return
+
+            # garante um display válido
+            if not self.display:
+                self.display = pygame.display.get_surface()
+
+            def on_resume():
+                self.sound_click.play()
+                self.overlay = None
+                self.paused = False
+                vol = self.option_data.get("music_set_volume")
+                if vol is not None and pygame.mixer.get_init():
+                    pygame.mixer.music.set_volume(vol)
+
+            def on_shop():
+                self.sound_click.play()
+                self.change_scene(EscamboScene())
+
+            def on_main_menu():
+                self.sound_click.play()
+                self.change_scene(Title())
+
+            # cria o overlay com fallback seguro de fonte
+            self.overlay = PauseInventoryOverlay(
+                parent_scene=self,
+                font=FONT_BIG,
+                small_font=FONT_SMALL,
+                on_resume=on_resume,
+                on_shop=on_shop,
+                on_main_menu=on_main_menu
+            )
+            self.paused = True
+
+            vol = self.option_data.get("music_set_volume")
+            if vol is not None and pygame.mixer.get_init():
+                pygame.mixer.music.set_volume(vol * 0.4)
+        except Exception:
+            import traceback; traceback.print_exc()
+            # se der algo errado, não derrube o jogo: apenas desfaz o pause
+            self.overlay = None
+            self.paused = False
+
+    def start_music(self):
+        """Inicia música com checagens seguras."""
+        try:
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+            vol = self.option_data.get("music_set_volume", 0)
+            pygame.mixer.music.load("assets/sounds/music1.mp3")
+            if vol:
+                pygame.mixer.music.play(-1)
+                pygame.mixer.music.set_volume(vol)
+        except Exception:
+            import traceback; traceback.print_exc()
+
+    # ====== EVENTOS ======
     def handle_events(self, event):
-        """Trata os eventos da cena atual."""
-        pass  # As subclasses podem sobrescrever esse método para lidar com teclado/mouse
-                
-    # "Desenhar" as informações na Cena
+        # se overlay ativo → ele consome os eventos e pronto
+        if self.overlay:
+            self.overlay.handle_events(event)
+            return
+
+        # abre com ESC
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.open_pause_menu()
+            return
+        # Subclasses tratam o resto
+
+    # ====== DESENHO ======
     def draw(self, display):
-        """Desenha todos os sprites e o efeito de fade na tela."""
-        self.all_sprites.draw(display)  # Desenha todos os sprites
-        self.fade.draw(display)  # Desenha o efeito de fade
-    
-    # Atualizando as Informações na Tela            
+        """Desenha sprites, fade e overlay."""
+        self.all_sprites.draw(display)
+        self.fade.draw(display)
+
+        if self.overlay:
+            self.overlay.draw(display)
+
+    # ====== UPDATE ======
     def update(self):
-        """Atualiza todos os sprites e o efeito de fade."""
-        self.all_sprites.update()  # Atualiza todos os sprites
-        self.fade.update()  # Atualiza o efeito de fade
-        
-    # Direcionando o sistema para próximas Telas/Cena/Fase    
+        """Atualiza sprites, fade ou overlay."""
+        if not self.paused:
+            self.all_sprites.update()
+            self.fade.update()
+        else:
+            if self.overlay:
+                self.overlay.update()
+
+    # ====== TROCA DE CENA ======
     def change_scene(self, next_scene):
-        """Altera a cena atual para a próxima cena especificada."""
         self.next = next_scene
-        
-    # Salvando Dados (Options, Level, GameOver) - json
+
+    # ====== SALVAR / CARREGAR ======
     def save_file(self, arquivo, dados):
-        """Salva dados em um arquivo JSON."""
         with open(arquivo, "w") as dados_do_arquivo:
-            json.dump(dados, dados_do_arquivo)  # Salva os dados no arquivo
-            print("OK")  # Mensagem de confirmação
-    
-    # Carregando Dados Salvo - json        
+            json.dump(dados, dados_do_arquivo)
+            print("OK")
+
     def load_file(self, arquivo):
-        """Carrega dados de um arquivo JSON."""
         with open(arquivo, "r") as dados_do_arquivo:
-            dados = json.load(dados_do_arquivo)  # Carrega os dados do arquivo
-            
-        return dados  # Retorna os dados carregados
+            dados = json.load(dados_do_arquivo)
+        return dados
+
+
+# ====== CENAS DE PLACEHOLDER ======
+class EscamboScene(Scene):
+    def draw(self, display):
+        super().draw(display)
+        txt = self.font.render("ESCAMBO / LOJA (placeholder)", True, (255, 255, 0))
+        display.blit(txt, (50, 50))
+
+
+class MenuInicialScene(Scene):
+    def draw(self, display):
+        super().draw(display)
+        txt = self.font.render("MENU INICIAL (placeholder)", True, (255, 255, 0))
+        display.blit(txt, (50, 50))
     
+
     
 # Criando Tela de Login de Usuário
 class Login(Scene):
@@ -260,11 +500,14 @@ class Title(Scene):
     def handle_events(self, event):
         """Gerencia eventos de entrada do usuário na tela inicial."""
         # Verifica se o evento recebido é uma tecla pressionada
-        if event.type == pygame.KEYDOWN or event.type == pygame.K_KP_ENTER:
-            # Chama a função para definir a opção selecionada com base no evento
-            self.indicator_set_option(event)
-            # Chama a função para atualizar a posição do indicador baseado no evento
-            self.indicator_position(event)
+        if event.type == pygame.KEYDOWN:
+            # Enter (principal) ou Enter do keypad
+            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.indicator_set_option(event)
+            # setas / WASD
+            if event.key in (pygame.K_DOWN, pygame.K_s, pygame.K_UP, pygame.K_w):
+                self.indicator_position(event)
+        return super().handle_events(event)  # deixa o ESC subir para Scene
 
     def indicator_set_option(self, event):
         """Define a opção selecionada com base na tecla pressionada."""
@@ -434,7 +677,7 @@ class Option(Scene):
                 pygame.display.set_mode((0, 0), pygame.FULLSCREEN)  # Modo tela cheia
                 
         elif (event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER) and self.indicator_choose == 2:
-            self.save_file("Teste.json", self.option_data)  # Salva as opções
+            self.save_file("teste.json", self.option_data)  # Salva as opções
             self.change_scene(Title())  # Retorna para a tela inicial
     
     def indicator_position(self, event):
@@ -469,10 +712,12 @@ class Option(Scene):
                     
     def handle_events(self, event):
         """Gerencia eventos de entrada do usuário na tela de opções."""
-        if event.type == pygame.KEYDOWN or event.type == pygame.K_KP_ENTER:
-            self.indicator_position(event)  # Atualiza a posição do indicador
-            self.indicator_set_option(event)  # Atualiza a opção selecionada
-        return super().handle_events(event)  # Chama o método handle_events da classe pai
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_DOWN, pygame.K_s, pygame.K_UP, pygame.K_w):
+                self.indicator_position(event)
+            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.indicator_set_option(event)
+        return super().handle_events(event)
     
     def indicator_animation(self):
         """Anima o movimento do cursor."""
@@ -814,186 +1059,349 @@ class Char_Select(Scene):
 
 # Criando Tela de Mapa
 class Map(Scene):
-    """Classe para a tela do mapa."""
+    """Classe para a tela do mapa com desenho por layers e áreas travadas quando concluídas."""
     
     def __init__(self):
         super().__init__()  # Chama o construtor da classe pai
         
-        # Fundo e Moldura
+        # -----------------------------
+        #  LAYERS ESTÁTICOS DO CENÁRIO
+        # -----------------------------
         try:
-            self.mar = Obj("assets/mapSelect/Mar.jpg", [0, 0], [self.all_sprites], size=(1280, 720))  # Imagem do mar
-            self.papiro = Obj("assets/mapSelect/00Papiro.png", [0, 0], [self.all_sprites], size=(1280, 720))  # Imagem do papiro
-            self.bgMap = Obj("assets/mapSelect/02Mapa_NovaPindorama_Fundo.png", [0, 0], [self.all_sprites], size=(1280, 720))  # Fundo do mapa
-            self.contMap = Obj("assets/mapSelect/01Mapa_NovaPindorama_Contorno.png", [0, 0], [self.all_sprites], size=(1280, 720))  # Contorno do mapa
-            self.bg_mold = Obj("assets/mapSelect/Moldura_V1.png", [0, 0], [self.all_sprites], size=(1280, 720))  # Moldura da tela
-        except pygame.error as e:
-            print(f"Erro ao carregar a imagem de fundo ou moldura: {e}")  # Exibe erro caso a imagem não carregue
-
-        # Estrutura de dados para armazenar informações das áreas
-        self.areas = self.initialize_areas()  # Inicializa as áreas do mapa
-                   
-        # Inicialização do cursor
-        self.cursor = Obj("assets/mapSelect/Cursor.png", [1070, 100], [self.all_sprites], size=(30, 48))  # Imagem do cursor
-        self.cursor_choose = 0  # Índice da área selecionada
-        self.completed_areas_status = [False] * len(self.areas)  # Inicializa todas as áreas como não completadas  
-
-        # Matriz de posições do cursor
-        self.cursor_positions = [area["cursor_position"] for area in self.areas]
-        
-        # Carrega a imagem da primeira área do mapa ao iniciar
-        self.load_area(self.cursor_choose)
-
-        # Inicializa a próxima cena como None
-        self.next = None   
+            # (opcional/estético) mar ao fundo — está no all_sprites, mas não é parte da ordem principal
+            self.mar = Obj("assets/mapSelect/Mar.jpg", [0, 0], [self.all_sprites], size=(1280, 720))
             
+            # 1) 00Papiro  (primeiro a ser desenhado)
+            self.papiro = Obj("assets/mapSelect/00Papiro.png", [0, 0], [self.all_sprites], size=(1280, 720))
+            
+            # 2) 02Mapa_NovaPindorama_Fundo (base do mapa)
+            self.bgMap  = Obj("assets/mapSelect/02Mapa_NovaPindorama_Fundo.png", [0, 0], [self.all_sprites], size=(1280, 720))
+            
+            # (extra) contorno do mapa – desenhado depois do layer dinâmico para ficar por cima, se você quiser
+            self.contMap = Obj("assets/mapSelect/01Mapa_NovaPindorama_Contorno.png", [0, 0], [self.all_sprites], size=(1280, 720))
+            
+            # Moldura (último de todos)
+            self.bg_mold = Obj("assets/mapSelect/Moldura_V1.png", [0, 0], [self.all_sprites], size=(1280, 720))
+        except pygame.error as e:
+            print(f"Erro ao carregar a imagem de fundo ou moldura: {e}")
+
+        # -----------------------------
+        #  ÁREAS / SELEÇÃO / PROGRESSO
+        # -----------------------------
+        self.areas = self.initialize_areas()  # lista com caminhos e posições
+        self.completed_areas_status = [False] * len(self.areas)  # status de conclusão por índice
+
+        # Cursor
+        self.cursor = Obj("assets/mapSelect/Cursor.png", [1070, 100], [self.all_sprites], size=(30, 48))
+        self.cursor_positions = [area["cursor_position"] for area in self.areas]
+
+        # Índice selecionado (mantemos compatibilidade com seu código antigo)
+        self.cursor_choose = 0
+        self.current_index = self.cursor_choose
+
+        # Overlay do Vilarejo Canaã COMPLETO (layer 3 quando concluído)
+        # ⚠️ carregamos como Surface isolada para NÃO depender do all_sprites (que é limpo pelo load_area)
+        try:
+            self.overlay_vilarejo_complete = pygame.image.load(
+                "assets/mapSelect/00Vilarejo_Canaa_Complete.png"
+            ).convert_alpha()
+            # se precisar de escala fixa:
+            self.overlay_vilarejo_complete = pygame.transform.scale(self.overlay_vilarejo_complete, (1280, 720))
+        except Exception as e:
+            print("[Map] Falha ao carregar 00Vilarejo_Canaa_Complete.png:", e)
+            self.overlay_vilarejo_complete = None
+
+        # Aplica progresso global (trava concluídas e posiciona cursor)
+        self.apply_world_progress()
+
+        # Carrega a camada dinâmica da área selecionada inicialmente
+        self.load_area(self.current_index)  # usa regra "selected vs completed" da própria área
+
+        # 🔽 Menu de pausa (como no seu original)
+        from script.setting import FONT_BIG, FONT_SMALL
+        self.pause_menu = PauseInventoryOverlay(
+            parent_scene=self,
+            font=FONT_BIG,
+            small_font=FONT_SMALL,
+            on_resume=self.resume_game,
+            on_shop=self.goto_shop,
+            on_main_menu=self.goto_menu
+        )
+
+        self.next = None
+
+    # -----------------------------------------------------
+    #  DEFINIÇÃO DAS ÁREAS (ordem do seu array de seleção)
+    # -----------------------------------------------------
     def initialize_areas(self):
         """Inicializa as áreas do mapa com suas respectivas informações."""
         return [
-            {
+            {  # 0 - Vilarejo Canaã (Level_1_2) -> fica TRAVADO quando concluído
                 "image_selected": "assets/mapSelect/00Vilarejo_Canaa.png",
                 "area_completed": "assets/mapSelect/00Vilarejo_Canaa_Complete.png",
-                "position": [0, 0], #(1502) - Cananéia (1070, 100)
+                "position": [0, 0],
                 "cursor_position": (1070, 100)
             },
-            {
+            {  # 1 - Vila da Enseada do Rio (próximo ponto)
                 "image_selected": "assets/mapSelect/01Vila_Enseada_Rio.png",
                 "area_completed": "assets/mapSelect/01Vila_Enseada_Rio_Complete.png",
-                "position": [0, 0], #(1535) - Iguape (500, 130)
+                "position": [0, 0],
                 "cursor_position": (500, 130)
             },
-            {
+            {  # 2 - Povoado Cadastro
                 "image_selected": "assets/mapSelect/02Povoado_Cadastro.png",
                 "area_completed": "assets/mapSelect/02Povoado_Cadastro_Complete.png",
-                "position": [0, 0], #(1650) - Registro (650, 240)
+                "position": [0, 0],
                 "cursor_position": (650, 240)
             },
-            {
+            {  # 3 - Vilarejo Grandes Pássaros
                 "image_selected": "assets/mapSelect/03Vilarejo_Grandes_Passaros.png",
                 "area_completed": "assets/mapSelect/03Vilarejo_Grandes_Passaros_Complete.png",
-                "position": [0, 0], #(1750) - Pariquera-Açu (760, 180)
+                "position": [0, 0],
                 "cursor_position": (760, 180)
             },
-            {
+            {  # 4 - Vale Luz & Sombra
                 "image_selected": "assets/mapSelect/04Vale_Luz_Sombra.png",
                 "area_completed": "assets/mapSelect/04Vale_Luz_Sombra_Complete.png",
-                "position": [0, 0], #(1750) - Eldorado (850, 370)
+                "position": [0, 0],
                 "cursor_position": (850, 370)
             },
-            {
+            {  # 5 - Freguesia Rio Peixes
                 "image_selected": "assets/mapSelect/05Freguesia_Rio_Peixes.png",
                 "area_completed": "assets/mapSelect/05Freguesia_Rio_Peixes_Complete.png",
-                "position": [0, 0], #(1820) - Juquiá (450, 310)
+                "position": [0, 0],
                 "cursor_position": (450, 310)
             },
-            {
+            {  # 6 - Vilarejo Praia Pequena
                 "image_selected": "assets/mapSelect/06Vilarejo_Praia_Pequena.png",
                 "area_completed": "assets/mapSelect/06Vilarejo_Praia_Pequena_Complete.png",
-                "position": [0, 0], #(1845) - Miracatu (350, 230)
+                "position": [0, 0],
                 "cursor_position": (350, 230)
             },
-            {
+            {  # 7 - Vila Pássaro Vermelho
                 "image_selected": "assets/mapSelect/07Vila_Passaro_Vermelho.png",
                 "area_completed": "assets/mapSelect/07Vila_Passaro_Vermelho_Complete.png",
-                "position": [0, 0], #(1860) - Jacupiranga (880, 200)
+                "position": [0, 0],
                 "cursor_position": (880, 200)
             },
-            {
+            {  # 8 - Vilarinho Pedras Fluem
                 "image_selected": "assets/mapSelect/08Vilarinho_Pedras_Fluem.png",
                 "area_completed": "assets/mapSelect/08Vilarinho_Pedras_Fluem_Complete.png",
-                "position": [0, 0], #(1880) - Itariri (250, 100)
+                "position": [0, 0],
                 "cursor_position": (250, 100)
             },
-            {
+            {  # 9 - Barragem Arco-Íris
                 "image_selected": "assets/mapSelect/09Barragem_Arco_Iris.png",
                 "area_completed": "assets/mapSelect/09Barragem_Arco_Iris_Complete.png",
-                "position": [0, 0], #(1880) - Sete Barras (600, 380)
+                "position": [0, 0],
                 "cursor_position": (600, 380)
             },
-            {
+            {  # 10 - Vale Alecrins
                 "image_selected": "assets/mapSelect/10Vale_Alecrins.png",
                 "area_completed": "assets/mapSelect/10Vale_Alecrins_Complete.png",
-                "position": [0, 0], #(1910) - Pedro de Toledo (170, 160)
+                "position": [0, 0],
                 "cursor_position": (170, 160)
             },
-            {
+            {  # 11 - Bosque Cajas
                 "image_selected": "assets/mapSelect/11Bosque_Cajas.png",
                 "area_completed": "assets/mapSelect/11Bosque_Cajas_Complete.png",
-                "position": [0, 0], #(1960) - Cajati (960, 260)
+                "position": [0, 0],
                 "cursor_position": (960, 260)
             },
         ]
-        
-               
+
+    # -----------------------------------------------------
+    #  PROGRESSO GLOBAL → TRAVAR + POSICIONAR CURSOR
+    # -----------------------------------------------------
+    def apply_world_progress(self):
+        """
+        Lê WORLD_PROGRESS e marca áreas concluídas.
+        Também posiciona o cursor na próxima área disponível.
+        """
+        done = WORLD_PROGRESS.get("areas_done", set())
+
+        # Mapeie "id da fase" -> índice da área na tela de mapa
+        # Aqui ligamos Level_1_2 ao índice 0 (Vilarejo Canaã)
+        level_to_index = {
+            "Level_1_2": 0,
+        }
+
+        # Marca como concluídas
+        for level_id in done:
+            idx = level_to_index.get(level_id)
+            if idx is not None and 0 <= idx < len(self.completed_areas_status):
+                self.completed_areas_status[idx] = True
+
+        # Se Level_1_2 foi concluído, cursor vai para "Vila da Enseada do Rio" (índice 1)
+        VILA_ENSEADA_IDX = 1
+        if "Level_1_2" in done and 0 <= VILA_ENSEADA_IDX < len(self.areas):
+            self.current_index = VILA_ENSEADA_IDX
+        else:
+            # fallback: se onde estamos já está concluído, pula para próxima desbloqueada
+            if self.completed_areas_status[self.current_index]:
+                self.current_index = self._next_unlocked_index(self.current_index, step=+1)
+
+        # mantém compatibilidade com o restante do código
+        self.cursor_choose = self.current_index
+        self.update_cursor_position()
+
+    def _next_unlocked_index(self, start, step=+1):
+        """
+        Retorna o próximo índice NÃO concluído a partir de 'start',
+        caminhando em 'step' (+1 direita, -1 esquerda).
+        Se TODAS estiverem concluídas, retorna o próprio start.
+        """
+        n = len(self.areas)
+        i = start
+        for _ in range(n):
+            i = (i + step) % n
+            if not self.completed_areas_status[i]:
+                return i
+        return start
+
+    def _is_locked(self, idx: int) -> bool:
+        """Travado = já concluído."""
+        return bool(self.completed_areas_status[idx])
+
+    # -----------------------------------------------------
+    #  CARREGAR LAYER DINÂMICO DA ÁREA SELECIONADA
+    # -----------------------------------------------------
     def load_area(self, index):
-        """Carrega a imagem da área selecionada."""
-        # Limpa os sprites antigos antes de carregar novos
+        """
+        Carrega a IMAGEM da área selecionada (layer dinâmico por cima do fundo).
+        OBS: mantém sua lógica de limpar e repor sprites da área;
+        por isso o overlay de 'Vilarejo_Canaa_Complete' foi carregado como Surface separada.
+        """
+        # limpa somente sprites de ÁREA, preservando os estáticos já desenhados por draw()
+        # (para manter seu comportamento original, deixamos como estava:)
         self.all_sprites.empty()
 
-        # Carrega a imagem da área selecionada
         area = self.areas[index]
-        area_image = area["image_selected"] if not self.completed_areas_status[index] else area["area_completed"]
-        
-        # Cria um novo objeto para a área carregada
-        Obj(area_image, area["position"], [self.all_sprites])  # Cria um objeto da área no grupo de sprites
+        # Se a área está concluída, usamos a arte 'Complete' como layer dinâmico
+        area_image_path = area["image_selected"] if not self.completed_areas_status[index] else area["area_completed"]
+        Obj(area_image_path, area["position"], [self.all_sprites])
 
-        # Atualiza a posição do cursor para a nova área
+        # atualiza posição do cursor
         self.update_cursor_position()
 
     def mark_area_as_completed(self):
-        """Marca a área atual como completada."""
-        self.completed_areas_status[self.cursor_choose] = True  # Atualiza o status da área atual
+        """Marca a área atual como completada (caso precise em outra lógica)."""
+        self.completed_areas_status[self.cursor_choose] = True
 
-    def handle_events(self, event):
-        """Gerencia a entrada do usuário para navegar entre as áreas."""
-        super().handle_events(event)  # Chama o método da classe pai para tratar eventos
-        
-        if event.type == pygame.KEYDOWN:  # Verifica se uma tecla foi pressionada
-            if event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:  # Se a tecla pressionada for 'Enter'
-                if self.cursor_choose == 0:  # Se a primeira posição estiver selecionada
-                    # Verifica se a área não foi completada
-                    if not self.completed_areas_status[self.cursor_choose]:  
-                        selected_area = self.areas[self.cursor_choose]["image_selected"]  # Obtém a imagem da área selecionada
-                        print(f"Área selecionada: {selected_area}")  # Exibe a área selecionada no console
-                        self.change_scene(Level())  # Muda para a cena do nível correspondente
-                    else:
-                        print("Esta área já foi completada.")  # Mensagem se a área já foi completada
-                else:
-                    print("Esta área não pode ser selecionada.")  # Mensagem se a área não for a primeira
+    # -----------------------------------------------------
+    #  ENTRAR NA ÁREA SELECIONADA (somente se desbloqueada)
+    # -----------------------------------------------------
+    def _enter_current_area(self):
+        """
+        Troca para a cena correspondente ao índice atual.
+        ⚠️ Só é chamado se NÃO estiver travada.
+        """
+        idx = self.current_index
 
-            elif event.key == pygame.K_LEFT or event.key == pygame.K_a:  # Se a tecla pressionada for 'esquerda' ou 'a'
-                # Lógica para mover o cursor para a esquerda
-                self.cursor_choose = (self.cursor_choose - 1) % len(self.cursor_positions)  # Move para a posição anterior
-                self.update_cursor_position()  # Atualiza a posição do cursor
-
-            elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:  # Se a tecla pressionada for 'direita' ou 'd'
-                # Lógica para mover o cursor para a direita
-                self.cursor_choose = (self.cursor_choose + 1) % len(self.cursor_positions)  # Move para a próxima posição
-                self.update_cursor_position()  # Atualiza a posição do cursor
-
-    def update_cursor_position(self):
-        """Atualiza a posição do cursor com base na área selecionada."""
-        cursor_x, cursor_y = self.cursor_positions[self.cursor_choose]  # Pega as coordenadas da posição atual do cursor
-        self.cursor.rect.topleft = (cursor_x, cursor_y)  # Atualiza a posição do cursor na tela
-
-    def confirm_selection(self):
-        """Confirma a seleção da área atual."""
-        if not self.completed_areas_status[self.cursor_choose]:  # Verifica se a área não foi completada
-            selected_area = self.areas[self.cursor_choose]["image_selected"]  # Obtém a imagem da área selecionada
-            print(f"Área selecionada: {selected_area}")  # Exibe a área selecionada
-            self.next = Level(selected_area)  # Muda para a cena do nível correspondente
+        # Mapeie aqui: indice -> cena
+        if idx == 0:
+            # Vilarejo Canaã (Level_1_1) — normalmente travado após concluir
+            self.change_scene(Level())
+        elif idx == 1:
+            # Vila da Enseada do Rio -> troque pela cena correta quando existir
+            # self.change_scene(Level_X_Y())
+            print("[Map] TODO: vincular cena da Vila da Enseada do Rio (idx=1)")
         else:
-            print("Esta área já foi completada.")  # Mensagem se a área já foi completada
+            print(f"[Map] TODO: vincular cena para índice {idx}")
 
+    # -----------------------------------------------------
+    #  EVENTOS: NAVEGAÇÃO + ENTRAR (pulando travadas)
+    # -----------------------------------------------------
+    def handle_events(self, event):
+        # ✅ Delegue para Scene (abre pausa com ESC, etc.)
+        super().handle_events(event)
+        
+        if self.overlay:
+            return
+        
+        if event.type == pygame.KEYDOWN:
+            # ➡️ Direita: pula áreas concluídas
+            if event.key in (pygame.K_RIGHT, pygame.K_d):
+                self.current_index = self._next_unlocked_index(self.current_index, step=+1)
+                self.cursor_choose = self.current_index
+                self.load_area(self.current_index)
+
+            # ⬅️ Esquerda: idem
+            elif event.key in (pygame.K_LEFT, pygame.K_a):
+                self.current_index = self._next_unlocked_index(self.current_index, step=-1)
+                self.cursor_choose = self.current_index
+                self.load_area(self.current_index)
+
+            # ✅ Confirmar entrada (somente se NÃO estiver travada)
+            elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_e, pygame.K_SPACE):
+                if not self._is_locked(self.current_index):
+                    self._enter_current_area()
+                else:
+                    print("[Map] Área concluída/travada — não pode entrar.")
+
+    # -----------------------------------------------------
+    #  CURSOR
+    # -----------------------------------------------------
+    def update_cursor_position(self):
+        """Atualiza a posição do cursor com base na área selecionada (índice atual)."""
+        # mantém compatibilidade com self.cursor_choose
+        self.cursor_choose = self.current_index
+        cursor_x, cursor_y = self.cursor_positions[self.current_index]
+        self.cursor.rect.topleft = (cursor_x, cursor_y)
+
+    # (mantém compatibilidade; não é usada diretamente na nova confirmação)
+    def confirm_selection(self):
+        """Confirma a seleção da área atual (compatibilidade)."""
+        if not self.completed_areas_status[self.cursor_choose]:
+            selected_area = self.areas[self.cursor_choose]["image_selected"]
+            print(f"Área selecionada: {selected_area}")
+            self.next = Level(selected_area)  # legado; não usado com _enter_current_area()
+        else:
+            print("Esta área já foi completada.")
+
+    # -----------------------------------------------------
+    #  DESENHO POR LAYERS — ORDEM EXATA
+    # -----------------------------------------------------
     def draw(self, screen):
-        """Desenha a cena atual na tela."""
-        self.mar.draw(screen)  # Desenha a imagem do mar
-        self.papiro.draw(screen)  # Desenha a imagem do papiro
-        self.bgMap.draw(screen)  # Desenha o fundo do mapa
-        self.contMap.draw(screen)  # Desenha o contorno do mapa
-        super().draw(screen)  # Chama o método da classe pai para desenhar o fundo
-        self.load_area(self.cursor_choose)  # Carrega a área atual
-        self.cursor.draw(screen)  # Desenha o cursor na tela
-        self.bg_mold.draw(screen)  # Desenha a moldura da tela
+        """Desenha a tela do mapa na ordem: 00Papiro → 02Fundo → (overlay concluído) → área selecionada → contorno → moldura."""
+        # 1) (opcional) mar — fica atrás do papiro na sua composição
+        self.mar.draw(screen)
+
+        # 2) 00Papiro
+        self.papiro.draw(screen)
+
+        # 3) 02Mapa_NovaPindorama_Fundo
+        self.bgMap.draw(screen)
+
+        # 4) OVERLAY de "00Vilarejo_Canaa_Complete" (SE concluído), SEM depender de all_sprites
+        if self.overlay_vilarejo_complete and self.completed_areas_status[0]:
+            screen.blit(self.overlay_vilarejo_complete, (0, 0))
+
+        # 5) LAYER DINÂMICO da área selecionada (selected/completed)
+        #    OBS: como load_area() limpou/criou sprites de área, usamos o draw padrão do Scene p/ desenhá-los agora.
+        super().draw(screen)
+
+        # 6) Cursor por cima do layer dinâmico
+        self.cursor.draw(screen)
+
+        # 7) Moldura final
+        self.bg_mold.draw(screen)
+
+       
+    # -----------------------------------------------------
+    #  PAUSA / SAÍDAS
+    # -----------------------------------------------------
+    def resume_game(self):
+        print("[DEBUG] Jogo retomado.")
+        self.overlay = None
+
+    def goto_shop(self):
+        print("[DEBUG] A funcionalidade de escambo ainda será implementada.")
+
+    def goto_menu(self):
+        print("[DEBUG] Retornando ao menu principal...")
+        self.change_scene(Title())
+   
 
 
 # Criando Tela de Nível
@@ -1003,14 +1411,78 @@ class Level(Scene):
     def __init__(self, player_data=None, hud_data=None): 
         super().__init__()  # Chama o construtor da classe base
         
+        self.font = pygame.font.Font(None, 36)  # Fonte usada pelo menu de pausa
+        
         # Criação do chão
         self.ground = Ground(0, 400, 800, 20)  # x, y, largura, altura
         self.all_sprites.add(self.ground)  # Adiciona o chão ao grupo de sprites
 
-        # Criação dos objetos na cena
-        self.img_a = Obj("assets/levelSprite/level_1_1a.png", [0, 0], [self.all_sprites])  # Fundo da fase
+        # Criação dos objetos na cena - Iremos trocar por layers
+        #self.img_a = Obj("assets/levelSprite/level_1_1a.png", [0, 0], [self.all_sprites])  # Fundo da fase
         self.hudbk = Hud("assets/charsSprite/player/Hud/Hud_Char_Fundo.png", [25, 25], [self.all_sprites], (640, 360))
-        self.img_b = Obj("assets/levelSprite/level_1_1b.png", [0, 0], [self.all_sprites])  # Fundo da fase
+        #self.img_b = Obj("assets/levelSprite/level_1_1b.png", [0, 0], [self.all_sprites])  # Fundo da fase
+        
+        # ---------- CAMADAS DO CENÁRIO (LEVEL_1_1) ----------
+        self.layers = LayerStack()
+        base_path = "assets/levelSprite/"
+
+        # ORDEM: do fundo para a frente (como você definiu)
+
+        # 1) level_1_1a (fundo absoluto) → BACK
+        self.layers.add("level_1_1a",
+            StaticLayer(f"{base_path}level_1_1a.png", z=0, plane="back", pos=(0,0))
+        )
+
+        # 2) level_1_1aa <-> level_1_1ab (intercalando) → BACK
+        self.layers.add("level_1_1aa_ab",
+            FlipLayer(f"{base_path}level_1_1aa.png", f"{base_path}level_1_1ab.png",
+                    fps=4.0, z=10, plane="back", pos=(0,0))
+        )
+
+        # 3) level_1_1b → BACK
+        self.layers.add("level_1_1b",
+            StaticLayer(f"{base_path}level_1_1b.png", z=20, plane="back", pos=(0,0))
+        )
+
+        # 4) level_1_1c → BACK
+        self.layers.add("level_1_1c",
+            StaticLayer(f"{base_path}level_1_1c.png", z=30, plane="back", pos=(0,0))
+        )
+
+        # 5) level_1_1ca <-> level_1_1cb (intercalando) → BACK
+        self.layers.add("level_1_1ca_cb",
+            FlipLayer(f"{base_path}level_1_1ca.png", f"{base_path}level_1_1cb.png",
+                    fps=5.0, z=40, plane="back", pos=(0,0))
+        )
+
+        # ==== (Player e NPC são desenhados entre back e front) ====
+
+        # 6) level_1_1d → FRONT (após player/NPC)
+        self.layers.add("level_1_1d",
+            StaticLayer(f"{base_path}level_1_1d.png", z=10, plane="front", pos=(0,0))
+        )
+
+        # 7) level_1_1da <-> level_1_1db (intercalando) → FRONT
+        self.layers.add("level_1_1ea_eb",
+            FlipLayer(f"{base_path}level_1_1ea.png", f"{base_path}level_1_1eb.png",
+                    fps=4.0, z=20, plane="front", pos=(0,0))
+        )
+
+        # 8) level_1_1ea <-> level_1_1eb (intercalando) → FRONT
+        self.layers.add("level_1_1fa_fb",
+            FlipLayer(f"{base_path}level_1_1fa.png", f"{base_path}level_1_1fb.png",
+                    fps=5.0, z=30, plane="front", pos=(0,0))
+        )
+
+        # 9) level_1_1f → FRONT (última de todas)
+        self.layers.add("level_1_1g",
+            StaticLayer(f"{base_path}level_1_1g.png", z=40, plane="front", pos=(0,0))
+        )
+
+        # relógio para delta time das animações
+        self._layers_last_ticks = pygame.time.get_ticks()
+        # ----------------------------------------------------------
+        
         
         # HUD com dados anteriores (se houver)
         self.hud = Hud("assets/charsSprite/player/Hud/Hud_Char_Contorno.png", [25, 25], [self.all_sprites], (640, 360))
@@ -1058,6 +1530,9 @@ class Level(Scene):
         self.selected_option = None  # Guarda a opção selecionada para confirmar
         self.exit_enabled = False  # Sinaliza quando o player pode sair para o Level_1_2
         
+        # quando liberar a saída, permite que o player atravesse a borda
+        setattr(self.player, "exit_mode", True)
+        
         #Gold e Conversão
         self.gold_reward = 0  # Quantidade de ouro por resposta correta (ajuste conforme necessário)
         self.points_to_gold_conversion = 2  # 1 ponto = 10 Gold (ajuste conforme necessário)
@@ -1068,8 +1543,18 @@ class Level(Scene):
 
     def handle_events(self, event):
         """Gerencia eventos de entrada do usuário na tela de nível."""
+        # ✅ Ativa o menu de pausa com ESC
+        super().handle_events(event)
+        
+        # ⚠️ Se o overlay estiver ativo, não processa eventos do jogo
+        if self.overlay:
+            return
+        
+        # 🎮 Eventos do jogador
         self.player.events(event)
 
+
+        # 🎯 Início da lógica de interações
         if event.type == pygame.KEYDOWN:  # Certifique-se de que é um evento de tecla
             # Inicia o diálogo com o NPC
             if event.key == pygame.K_e and self.player.rect.colliderect(self.npc.rect) and not self.chatbox.is_active():
@@ -1088,6 +1573,7 @@ class Level(Scene):
                     formatted_dialogue = [f"{speaker} {message}" for speaker, message in self.final_dialogue]
                     self.chatbox.display_messages(formatted_dialogue)
                     self.chatbox.active = True
+                    return super().handle_events(event)
 
             # Avança no diálogo ou responde à questão
             elif event.key == pygame.K_RETURN and self.chatbox.is_active():
@@ -1156,16 +1642,58 @@ class Level(Scene):
                     elif self.chatbox.current_message >= len(self.chatbox.messages) and self.dialogue_stage == 2:
                         self.chatbox.active = False
                         self.exit_enabled = True
+                        
+                        
 
             # Navegação entre opções
             elif (event.key == pygame.K_UP or event.key == pygame.K_w) and self.chatbox.options:
                 self.chatbox.previous_option()
             elif (event.key == pygame.K_DOWN or event.key == pygame.K_s) and self.chatbox.options:
                 self.chatbox.next_option()
+                
+    def open_pause_menu(self):
+        """Abre o menu de pausa com overlay de inventário."""
+        # Garante que o overlay só é criado se ainda não existir
+        if not self.overlay:
+            self.overlay = PauseInventoryOverlay(
+                parent_scene=self,
+                font=FONT_BIG,
+                small_font=FONT_SMALL,
+                on_resume=self.on_resume,
+                on_shop=self.on_shop,
+                on_main_menu=self.on_main_menu
+            )
 
-            return super().handle_events(event)
+    def on_resume(self):
+        """Fecha o menu de pausa e retoma o jogo."""
+        print("[DEBUG] Jogo retomado.")
+        self.overlay = None
+
+    def on_shop(self):
+        """Ação da opção 'Escambo (Loja)'."""
+        print("[DEBUG] A funcionalidade de escambo ainda será implementada.")
+        # Aqui você pode trocar a cena futuramente:
+        # self.change_scene(Shop())
+
+    def on_main_menu(self):
+        """Volta para a tela inicial."""
+        print("[DEBUG] Retornando ao menu principal...")
+        from script.scenes import Title  # Evita import circular
+        self.change_scene(Title())           
+
 
     def update(self):
+        
+        # ---- delta-time para animações de layers ----
+        now = pygame.time.get_ticks()
+        if not hasattr(self, "_layers_last_ticks"):
+            self._layers_last_ticks = now
+        dt = (now - self._layers_last_ticks) / 1000.0
+        self._layers_last_ticks = now
+
+        self.layers.update(dt)
+        # --------------------------------------------
+        
         """Atualiza o estado da cena, incluindo o jogador e animações."""        
         self.player.check_death()  # <- Verifica e reduz a vida se necessário
         self.hud.update_life(self.player.life)  # Atualiza os pontos de vida
@@ -1177,7 +1705,7 @@ class Level(Scene):
         self.all_sprites.update()
         
         # Se o jogador concluiu o diálogo e saiu pela direita, muda de fase
-        if self.exit_enabled and self.player.rect.x >= 1150:
+        if self.exit_enabled and self.player.rect.x >= 1280:
             print("[DEBUG] Transição de fase - vidas atuais:", self.player.lives)
             self.change_scene(Level_1_2(
                 player_data={
@@ -1204,36 +1732,34 @@ class Level(Scene):
         """Desenha a cena e o jogador na tela."""
         screen.fill((0, 0, 0))  # Limpa a tela com fundo preto
         
-        # Desenha a primeira parte do fundo
-        screen.blit(self.img_a.image, self.img_a.rect)
+        # 1) BACK (fundo e camadas intercaladas antes do player/NPC)
+        self.layers.draw_back(screen)
 
-        # Desenha todos os objetos da cena, incluindo o fundo
+        # 2) SPRITES (tudo que já existe nos seus grupos)
         self.all_sprites.draw(screen)
-        
-        # Desenha o jogador e o NPC
+
+        # 3) Player e NPC explícitos (mantém seu comportamento atual)
         screen.blit(self.npc.image, self.npc.rect)
         screen.blit(self.player.image, self.player.rect)
-        
-        # Desenha a segunda parte do fundo
-        screen.blit(self.img_b.image, self.img_b.rect)
 
-        # Desenha os disparos do jogador
+        # 4) FRONT (camadas que ficam na frente de todos)
+        self.layers.draw_front(screen)
+
+        # 5) Disparos do player (se quer que fiquem na frente do front, deixe aqui;
+        #    se quiser que fiquem "no meio", mova o loop para antes do draw_front)
         for shot in self.player.shots:
             shot.draw(screen)
-            
-        # Desenha buracos apenas quando o chat não estiver ativo
-#        if not self.chatbox.is_active():
-#           for hole in self.player.holes:
-#                pygame.draw.rect(screen, (255, 0, 0), hole, 2)
-        
-        # Desenha o Hud (Background e Contorno)
-        screen.blit(self.hud.image, self.hud.rect)  # Desenho do HUD
-        
-        # Desenha a chatbox (se ativa)
+
+        # 6) HUD (por cima de tudo)
+        screen.blit(self.hud.image, self.hud.rect)
+
+        # 7) Chatbox e Overlay (se ativos)
         self.chatbox.draw(screen)
-        
-        pygame.display.update()  # Atualiza a tela
-        
+        if self.overlay:
+            self.overlay.draw(screen)
+
+        pygame.display.update()
+     
         
 # Criando Tela de Nível
 class Level_1_2(Level):
@@ -1245,13 +1771,45 @@ class Level_1_2(Level):
         # Criação do chão
         self.ground = Ground(0, 400, 800, 20)
         self.all_sprites.add(self.ground)
+        
+        self.layers = LayerStack()
 
         # Fundo da fase
-        self.img = Obj("assets/levelSprite/level_1_2.png", [0, 0], [self.all_sprites])
+        #self.img = Obj("assets/levelSprite/level_1_2.png", [0, 0], [self.all_sprites])
         self.hudbk = Hud("assets/charsSprite/player/Hud/Hud_Char_Fundo.png", [25, 25], [self.all_sprites], (640, 360))
         
         # Criação da HUD do Boss
         self.boss_hud = BossHud("assets/charsSprite/bosses/Hud_Mapinguari.png", (0, 0), (1280, 720))
+        
+        self.layers = LayerStack()
+        
+        # ---------- CAMADAS DO CENÁRIO (LEVEL_1_2) ----------
+        base_path = "assets/levelSprite/"   # use este prefixo simples (imagens na raiz de levelSprite)
+
+        # 1) FUNDO ABSOLUTO → BACK
+        self.layers.add("level_1_2a",
+            StaticLayer(f"{base_path}level_1_2a.png", z=0, plane="back", pos=(0,0))
+        )
+
+        # ==== Player / Boss são desenhados entre BACK e FRONT ====
+
+        # 4) PAR INTERCALADO → FRONT (fica NA FRENTE do player/boss)
+        #    ATENÇÃO: ajuste os nomes exatamente como estão nos arquivos:
+        #    se seus arquivos são "level_1_2AA.png" (AA maiúsculo) e "level_1_2ab.png", use assim:
+        flip_AA = f"{base_path}level_1_2AA.png"  # ou "level_1_2aa.png" se for tudo minúsculo
+        flip_ab = f"{base_path}level_1_2ab.png"
+
+        self.layers.add("level_1_2AA_ab",
+            FlipLayer(flip_AA, flip_ab, fps=4.0, z=10, plane="front", pos=(0,0))
+        )
+
+        # 5) CAMADA FRONTAL ESTÁTICA → FRONT
+        self.layers.add("level_1_2b",
+            StaticLayer(f"{base_path}level_1_2b.png", z=20, plane="front", pos=(0,0))
+        )
+
+        # Relógio p/ delta-time das animações de layer
+        self._layers_last_ticks = pygame.time.get_ticks()
 
         # Criação do jogador com dados recebidos da fase anterior
         if player_data:
@@ -1282,6 +1840,10 @@ class Level_1_2(Level):
 
         # Boss
         self.boss = Boss_Mapinguari([850, 100], [self.all_sprites], size=(400, 400))
+        
+        # --- ADICIONE: flags ---
+        self.boss_defeated = False
+        self.exit_enabled = False
 
         # Fonte e chatbox
         #font = pygame.font.Font(None, 30)
@@ -1292,6 +1854,8 @@ class Level_1_2(Level):
         self.boss_name_font = pygame.font.Font("assets/font/Primitive.ttf", 28)  # Tamanho da fonte: 40
         self.boss_name_text = self.boss_name_font.render("Mapinguari", True, (0, 0, 0))  # Branco
         self.boss_name_pos = (880, 580)  # Posição no canto superior direito (ajuste conforme a tela)
+        
+        self.disable_auto_exit = True  # <- impede a lógica do Level base de rodar aqui
 
         # Controle de diálogo e questões
         self.dialogue = Dialogo_1_1.falas[:5]
@@ -1309,143 +1873,225 @@ class Level_1_2(Level):
 
         self.questions = Questoes_1_1.perguntas[:]
         random.shuffle(self.questions)
+        
+        # Fonte de pausa
+        self.font = FONT_BIG
            
 
     def handle_events(self, event):
-        """Gerencia eventos de entrada do usuário na tela de nível."""
-        self.player.events(event)
+        """Gerencia eventos de entrada do usuário na tela de nível (player e chatbox desacoplados)."""
+        # 0) Overlay de pausa tem prioridade total
+        if self.overlay:
+            self.overlay.handle_events(event)
+            return
 
-        if event.type == pygame.KEYDOWN:  # Certifique-se de que é um evento de tecla
-            # Inicia o diálogo com o NPC
-            if event.key == pygame.K_e and self.player.rect.colliderect(self.boss.rect) and not self.chatbox.is_active():
-                if self.dialogue_stage == 0:  # Diálogo inicial
-                    # Converte o diálogo para uma lista de strings no formato desejado
-                    formatted_dialogue = [f"{speaker} {message}" for speaker, message in Dialogo_1_1.falas[:5]]
-                    self.chatbox.display_messages(formatted_dialogue)
-                    self.chatbox.active = True
-                elif self.dialogue_stage == 2:  # Diálogo final
-                    # Limpa qualquer dado residual das questões
-                    self.chatbox.options = []  # Limpa as opções
-                    self.chatbox.title = ""  # Limpa o título
-                    self.chatbox.question = ""  # Limpa a pergunta
+        # 1) ESC abre o menu de pausa (e consome o evento)
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.open_pause_menu()
+            return
 
-                    # Exibe o diálogo final
-                    formatted_dialogue = [f"{speaker} {message}" for speaker, message in self.final_dialogue]
-                    self.chatbox.display_messages(formatted_dialogue)
-                    self.chatbox.active = True
+        # 2) SEMPRE repassar o evento para o Player primeiro
+        #    (garante que setas/A-D/W-S etc. funcionem para o player independentemente de chatbox)
+        if event.type in (pygame.KEYDOWN, pygame.KEYUP):
+            self.player.events(event)
 
-            # Avança no diálogo ou responde à questão
-            elif event.key == pygame.K_RETURN and self.chatbox.is_active():
-                if self.chatbox.options:  # Responde à questão
-                    selected_option = self.chatbox.select_option()
-                    current_question = self.questions[self.current_question]
-                    if selected_option == current_question["resposta_correta"]:
-                        print("Resposta correta!")
-                        points = current_question.get("pontos", 0)  # Obtém os pontos da questão
-                        if points > 0:  # Verifica se a questão tem pontos
-                            gold_reward = points * self.points_to_gold_conversion  # Converte pontos para gold
-                            self.hud.update_gold(self.hud.gold + gold_reward)  # Atualiza o ouro no HUD
-                            print(f"Você ganhou {gold_reward} de gold!")
-                        else:
-                            print("Esta questão não tem pontos definidos.")
+        # 3) Helpers seguros para chatbox
+        def cb_exists() -> bool:
+            return self.chatbox is not None
 
-                    else:
-                        print("Resposta errada.")
-                    # Avança para a próxima questão ou finaliza as perguntas
-                    self.current_question += 1
-                    if self.current_question < len(self.questions):
-                        question_data = self.questions[self.current_question]
-                        
-                        # Embaralha as alternativas antes de exibi-las
-                        shuffled_options = question_data["opcoes"][:]
-                        random.shuffle(shuffled_options)  # Embaralha as alternativas
-                        
-                        self.chatbox.display_question(
-                            question_data["titulo"],
-                            question_data["pergunta"],  # Texto da pergunta
-                            shuffled_options  # Alternativas embaralhadas
-                        )
-                    else:
-                       # Finaliza as perguntas e ativa o diálogo final
-                        self.dialogue_stage = 2  # Passa para o diálogo final
-                        self.chatbox.options = []  # Limpa as opções
-                        self.chatbox.title = ""  # Limpa o título
-                        self.chatbox.question = ""  # Limpa a pergunta
+        def cb_active() -> bool:
+            return cb_exists() and bool(getattr(self.chatbox, "active", False))
 
+        def cb_has_options() -> bool:
+            return cb_exists() and bool(getattr(self.chatbox, "options", []))
+
+        # 4) Ações de diálogo (somente se você realmente estiver usando chatbox)
+        if event.type == pygame.KEYDOWN:
+            # 4.1) Iniciar diálogo (E perto do boss), com todas as checagens
+            if (event.key == pygame.K_e
+                and self.player.rect.colliderect(self.boss.rect)
+                and cb_exists()
+                and hasattr(self.chatbox, "is_active")
+                and not self.chatbox.is_active()):
+                if self.dialogue_stage == 0:
+                    # formata falas iniciais
+                    if hasattr(self.chatbox, "display_messages"):
+                        formatted_dialogue = [f"{speaker} {message}" for speaker, message in Dialogo_1_1.falas[:5]]
+                        self.chatbox.display_messages(formatted_dialogue)
+                        self.chatbox.active = True
+                elif self.dialogue_stage == 2:
+                    # limpa resíduos + mostra falas finais
+                    if cb_exists():
+                        if hasattr(self.chatbox, "options"):  self.chatbox.options = []
+                        if hasattr(self.chatbox, "title"):    self.chatbox.title = ""
+                        if hasattr(self.chatbox, "question"): self.chatbox.question = ""
+                    if hasattr(self.chatbox, "display_messages"):
                         formatted_dialogue = [f"{speaker} {message}" for speaker, message in self.final_dialogue]
                         self.chatbox.display_messages(formatted_dialogue)
                         self.chatbox.active = True
+
+            # 4.2) Avançar diálogo / responder questão (Enter) — só se chatbox ativa
+            elif event.key == pygame.K_RETURN and cb_active():
+                if cb_has_options():
+                    # respondendo questão
+                    if hasattr(self.chatbox, "select_option"):
+                        selected_option = self.chatbox.select_option()
+                    else:
+                        selected_option = None
+
+                    current_question = self.questions[self.current_question]
+                    if selected_option == current_question["resposta_correta"]:
+                        print("Resposta correta!")
+                        points = current_question.get("pontos", 0)
+                        if points > 0:
+                            gold_reward = points * self.points_to_gold_conversion
+                            self.hud.update_gold(self.hud.gold + gold_reward)
+                            print(f"Você ganhou {gold_reward} de gold!")
+                        else:
+                            print("Esta questão não tem pontos definidos.")
+                    else:
+                        print("Resposta errada.")
+
+                    # próxima questão ou diálogo final
+                    self.current_question += 1
+                    if self.current_question < len(self.questions):
+                        q = self.questions[self.current_question]
+                        shuffled = q["opcoes"][:]
+                        random.shuffle(shuffled)
+                        if hasattr(self.chatbox, "display_question"):
+                            self.chatbox.display_question(q["titulo"], q["pergunta"], shuffled)
+                    else:
+                        self.dialogue_stage = 2
+                        if cb_exists():
+                            if hasattr(self.chatbox, "options"):  self.chatbox.options = []
+                            if hasattr(self.chatbox, "title"):    self.chatbox.title = ""
+                            if hasattr(self.chatbox, "question"): self.chatbox.question = ""
+                        if hasattr(self.chatbox, "display_messages"):
+                            formatted_dialogue = [f"{speaker} {message}" for speaker, message in self.final_dialogue]
+                            self.chatbox.display_messages(formatted_dialogue)
+                            self.chatbox.active = True
                 else:
-                    self.chatbox.next_message()
+                    # avançar falas
+                    if hasattr(self.chatbox, "next_message"):
+                        self.chatbox.next_message()
 
-                    # Quando o diálogo inicial termina, inicia as questões
-                    if self.chatbox.current_message >= len(self.chatbox.messages) and self.dialogue_stage == 0:
-                        self.dialogue_stage = 1  # Avança para a etapa de questões
-                        question_data = self.questions[self.current_question]
-                        
-                        # Embaralha as alternativas antes de exibi-las
-                        shuffled_options = question_data["opcoes"][:]
-                        random.shuffle(shuffled_options)  # Embaralha as alternativas
-                        
-                        self.chatbox.display_question(
-                            question_data["titulo"],
-                            question_data["pergunta"],
-                            shuffled_options
-                        )
-                        self.chatbox.active = True
-                        
-                    # Verificar para Colocar o Score Ponts aqui, como Estágio 2 e retornar para o Diálogo como Estágio 3   
+                    # terminou falas iniciais -> começa perguntas
+                    if (cb_exists() and
+                        hasattr(self.chatbox, "current_message") and
+                        hasattr(self.chatbox, "messages") and
+                        self.chatbox.current_message >= len(self.chatbox.messages) and
+                        self.dialogue_stage == 0):
+                        self.dialogue_stage = 1
+                        q = self.questions[self.current_question]
+                        shuffled = q["opcoes"][:]
+                        random.shuffle(shuffled)
+                        if hasattr(self.chatbox, "display_question"):
+                            self.chatbox.display_question(q["titulo"], q["pergunta"], shuffled)
+                            self.chatbox.active = True
 
-                    # Quando o diálogo final termina, desativa o chatbox
-                    elif self.chatbox.current_message >= len(self.chatbox.messages) and self.dialogue_stage == 2:
+                    # terminou falas finais -> libera saída
+                    elif (cb_exists() and
+                        hasattr(self.chatbox, "current_message") and
+                        hasattr(self.chatbox, "messages") and
+                        self.chatbox.current_message >= len(self.chatbox.messages) and
+                        self.dialogue_stage == 2):
                         self.chatbox.active = False
-                        self.exit_enabled = True  # Libera a saída do jogador após o diálogo final
+                        self.exit_enabled = True
+                        
+                        # quando liberar a saída, permite que o player atravesse a borda
+                        setattr(self.player, "exit_mode", True)
 
-            # Navegação entre opções
-            elif (event.key == pygame.K_UP or event.key == pygame.K_w) and self.chatbox.options:
-                self.chatbox.previous_option()
-            elif (event.key == pygame.K_DOWN or event.key == pygame.K_s) and self.chatbox.options:
-                self.chatbox.next_option()
+            # 4.3) Navegação da chatbox com W/S (setas continuam livres para o Player)
+            elif event.key == pygame.K_w and cb_has_options():
+                if hasattr(self.chatbox, "previous_option"):
+                    self.chatbox.previous_option()
+            elif event.key == pygame.K_s and cb_has_options():
+                if hasattr(self.chatbox, "next_option"):
+                    self.chatbox.next_option()
 
-            return super().handle_events(event)
+            # 4.4) Confirmar também com Espaço ou E (além de Enter)
+            elif event.key in (pygame.K_SPACE, pygame.K_e) and cb_active():
+                if hasattr(self.chatbox, "confirm"):
+                    self.chatbox.confirm()
+
+            # 4.5) (Opcional) fechar chatbox com ESC
+            elif event.key == pygame.K_ESCAPE and cb_exists():
+                # se tiver um método próprio:
+                if hasattr(self, "close_dialog"):
+                    self.close_dialog()
+                else:
+                    # fallback seguro
+                    self.chatbox = None
+
+        # 5) deixe o restante da cadeia da cena (se necessário)
+    #    return super().handle_events(event)
+        
+    def open_pause_menu(self):
+        """Abre o menu de pausa com overlay de inventário."""
+        if not self.overlay:
+            from script.setting import FONT_BIG, FONT_SMALL  # ✅ deve importar aqui também
+            self.overlay = PauseInventoryOverlay(
+                parent_scene=self,
+                font=FONT_BIG,
+                small_font=FONT_SMALL,
+                on_resume=self.on_resume,
+                on_shop=self.on_shop,
+                on_main_menu=self.on_main_menu
+            )
+
+    def on_resume(self):
+        print("[DEBUG] Jogo retomado.")
+        self.overlay = None
+
+    def on_shop(self):
+        print("[DEBUG] A funcionalidade de escambo ainda será implementada.")
+
+    def on_main_menu(self):
+        print("[DEBUG] Retornando ao menu principal...")
+        from script.scenes import Title
+        self.change_scene(Title())    
 
     def update(self):
-        """Atualiza o estado da cena, incluindo o jogador e animações."""        
-        # Atualiza os dados do HUD com base no estado atual do jogador
+        # ---- delta-time para animações de layer ----
+        now = pygame.time.get_ticks()
+        dt = (now - getattr(self, "_layers_last_ticks", now)) / 1000.0
+        self._layers_last_ticks = now
+        self.layers.update(dt)
+        # --------------------------------------------
+
+        # HUD do player
         self.hud.update_life(self.player.life)
         self.hud.update_lives(self.player.lives)
         self.hud.update_xp(self.player.xp)
 
-        # Atualiza os sprites do jogador e do NPC
-        self.player.update()
-        self.boss.update()
-
-        # Atualiza todos os outros sprites
+        # Atualizações padrões (groups etc.)
         super().update()
-        self.all_sprites.update()
 
-        # Quando o diálogo final tiver sido concluído e o jogador andar até a borda da tela...
-        if self.exit_enabled and self.player.rect.x >= 1150:
-            # Troca para a mesma fase (ou próxima), passando os dados atualizados
-            self.change_scene(Level_1_2(
-                player_data={
-                    "image_path": self.player.image_path,
-                    "position": [0, 250],  # Reinicia no início da nova fase
-                    "groups": [self.all_sprites],
-                    "size": self.player.size,
-                    "life": self.player.life,
-                    "lives": self.player.lives,
-                    "xp": self.player.xp
-                },
-                hud_data={
-                    "gold": self.hud.gold,
-                    "life": self.player.life,
-                    "lives": self.player.lives,
-                    "xp": self.player.xp
-                }
-            ))
+        # --- 1 HIT KILL: tiro do player acertou o boss? ---
+        if not getattr(self, "boss_defeated", False):
+            for shot in list(self.player.shots):
+                if shot.rect.colliderect(self.boss.rect):
+                    self.boss_defeated = True
+                    self.exit_enabled = True
+                    setattr(self.player, "exit_mode", True) # ← permite cruzar a borda
+                    self._auto_exit = True  # ativa auto-walk
+                    
+                    try:
+                        self.boss.kill()   # remove do all_sprites se estiver nele
+                    except Exception:
+                        pass
+                    shot.kill()
+                    break
 
-        # Se o jogador ficar sem vidas, muda para a tela de Game Over
+        # --- sair pela direita -> volta para o mapa e marca a área como concluída ---
+        if self.exit_enabled and self.player.rect.x >= 1280:
+            # marca a área desta fase como concluída (persistido em memória do módulo)
+            WORLD_PROGRESS["areas_done"].add("Level_1_2")
+
+            # volta para a tela de mapa
+            self.change_scene(Map())
+
+        # Game Over
         if self.player.lives <= 0:
             self.change_scene(GameOver())
 
@@ -1453,32 +2099,39 @@ class Level_1_2(Level):
         """Desenha a cena e o jogador na tela."""
         screen.fill((0, 0, 0))  # Limpa a tela com fundo preto
 
-        # Desenha todos os objetos da cena, incluindo o fundo
-        self.all_sprites.draw(screen)
-        
-        # Desenha o jogador e o NPC
-        
+        # 1) FUNDO -> desenha apenas os layers 'back' (aqui entra o Level_1_2a)
+        #    (garanta no __init__ que você registrou: StaticLayer("level_1_2a", plane="back"))
+        self.layers.draw_back(screen)
+
+        # 2) PLAYER
         screen.blit(self.player.image, self.player.rect)
 
-        # Desenha os disparos do jogador
+        # 3) BOSS (logo após o player)
+        if not getattr(self, "boss_defeated", False):
+            screen.blit(self.boss.image, self.boss.rect)
+
+        # 4) LAYERS FRONTAIS -> par intercalado (AA<->ab) e depois a estática 'b'
+        #    (ambos devem ter plane="front" no __init__)
+        self.layers.draw_front(screen)
+
+        # 5) Disparos do player (se quer que fiquem ATRÁS das máscaras frontais,
+        #    mova este bloco para ANTES de self.layers.draw_front(screen))
         for shot in self.player.shots:
             shot.draw(screen)
-        
-        # Desativado: não usa chatbox no momento
-        # if self.chatbox and self.chatbox.is_active():
-        #     self.chatbox.draw(screen)
 
-        
-        # Desenha o Hud (Background e Contorno)
-        screen.blit(self.hud.image, self.hud.rect)  # Desenho do HUD
-        
-        # Desenha o HUD do Boss (Mapinguari)
-        screen.blit(self.boss_hud.image, self.boss_hud.rect)
-        
-        # Escreve o nome do Boss na tela
-        screen.blit(self.boss_name_text, self.boss_name_pos)
-        
-        pygame.display.update()  # Atualiza a tela
+        # 6) HUD do Player
+        screen.blit(self.hud.image, self.hud.rect)
+
+        # 7) HUD do Boss (por último)
+        if not getattr(self, "boss_defeated", False):
+            screen.blit(self.boss_hud.image, self.boss_hud.rect)
+            screen.blit(self.boss_name_text, self.boss_name_pos)
+
+        # 8) Overlay (se ativo)
+        if self.overlay:
+            self.overlay.draw(screen)
+
+        pygame.display.update()
            
                
 # Criando Tela de Game Over

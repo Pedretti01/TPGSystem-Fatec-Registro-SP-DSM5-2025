@@ -27,25 +27,25 @@ class Obj(pygame.sprite.Sprite):
         if self.visible:
             surface.blit(self.image, self.rect.topleft)  # Desenha a imagem na posição do retângulo
 
-class Fade(Obj):
-    """Classe para criar um efeito de desvanecimento."""
+#class Fade(Obj):
+#    """Classe para criar um efeito de desvanecimento."""
     
-    def __init__(self, color):
-        self.image = pygame.Surface((BASE_WIDTH, BASE_HEIGHT)).convert_alpha()  # Superfície para o efeito de fade
-        self.image.fill(color)  # Preenche a superfície com a cor especificada
-        self.image_alpha = 255  # Opacidade inicial
-        self.speed_alpha = 5  # Velocidade de desvanecimento
+#    def __init__(self, color):
+#        self.image = pygame.Surface((BASE_WIDTH, BASE_HEIGHT)).convert_alpha()  # Superfície para o efeito de fade
+#        self.image.fill(color)  # Preenche a superfície com a cor especificada
+#        self.image_alpha = 255  # Opacidade inicial
+#        self.speed_alpha = 5  # Velocidade de desvanecimento
 
-    def draw(self, display):
-        """Desenha a superfície de fade na tela."""
-        display.blit(self.image, (0, 0))
+#    def draw(self, display):
+#        """Desenha a superfície de fade na tela."""
+#        display.blit(self.image, (0, 0))
 
-    def update(self):
-        """Atualiza a opacidade da superfície de fade."""
-        if self.image_alpha > 1:
-            self.image_alpha -= self.speed_alpha  # Reduz a opacidade
+#    def update(self):
+#        """Atualiza a opacidade da superfície de fade."""
+#        if self.image_alpha > 1:
+#            self.image_alpha -= self.speed_alpha  # Reduz a opacidade
 
-        self.image.set_alpha(self.image_alpha)  # Define a opacidade da superfície
+#        self.image.set_alpha(self.image_alpha)  # Define a opacidade da superfície
 
 
 class Text(pygame.sprite.Sprite):
@@ -64,6 +64,150 @@ class Text(pygame.sprite.Sprite):
     def update_text(self, text):
         """Atualiza o texto exibido."""
         self.image = self.font.render(text, True, self.color)  # Renderiza o novo texto
+        
+
+class PauseInventoryOverlay:
+    """
+    Overlay de pausa/inventário que desenha por cima da cena.
+    Opções:
+      - Retomar
+      - Escambo (Loja)
+      - Menu Inicial
+    """
+    def __init__(self, parent_scene, font, on_resume, on_shop, on_main_menu):
+        self.parent_scene = parent_scene
+        # Caminho para a fonte padronizada
+        primitive_path = "assets/font/Primitive.ttf"
+        # Fonte principal usada para o título e opções
+        self.font = font or pygame.font.Font(primitive_path, 36)
+        # Fonte menor usada para subtítulos e inventário
+        self.small_font = pygame.font.Font(primitive_path, 24)
+        self.on_resume = on_resume
+        self.on_shop = on_shop
+        self.on_main_menu = on_main_menu
+
+        self.options = ["Retomar", "Escambo (Loja)", "Menu Inicial"]
+        self.selected = 0
+
+        self.bg_alpha = 180
+
+        # tamanho do painel com fallback robusto
+        surf = self.parent_scene.display or pygame.display.get_surface()
+        if surf is None:
+            # último fallback para evitar crash
+            surf = pygame.display.set_mode((BASE_WIDTH, BASE_HEIGHT))
+            self.parent_scene.display = surf
+        W, H = surf.get_size()
+        self.panel_width = int(W * 0.6)
+        self.panel_height = int(H * 0.65)
+
+        self.title_text = "Inventário & Pausa"
+
+        self.inventory_items = self._read_inventory()
+
+    def _read_inventory(self):
+        # Integre com seu sistema real de inventário.
+        # Aqui está um placeholder com 4 slots fictícios:
+        return [
+            {"nome": "Poção de Cura", "qtd": 2},
+            {"nome": "Cogumelo de Energia", "qtd": 1},
+            {"nome": "Flecha de Taquara", "qtd": 18},
+            {"nome": "Moedas", "qtd": 37},
+        ]
+
+    def handle_events(self, event):
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_UP, pygame.K_w):
+                self.selected = (self.selected - 1) % len(self.options)
+                print(f"[DEBUG] Opção selecionada (↑): {self.options[self.selected]}")
+                self.parent_scene.sound_click.play()
+            elif event.key in (pygame.K_DOWN, pygame.K_s):
+                self.selected = (self.selected + 1) % len(self.options)
+                self.parent_scene.sound_click.play()
+            elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                self._activate_selected()
+            elif event.key == pygame.K_ESCAPE:
+                # ESC também retoma o jogo
+                self.on_resume()
+
+    def _activate_selected(self):
+        option = self.options[self.selected]
+        if option == "Retomar":
+            self.on_resume()
+        elif option == "Escambo (Loja)":
+            self.on_shop()
+        elif option == "Menu Inicial":
+            self.on_main_menu()
+
+    def update(self):
+        # Caso futuramente tenha animações no menu
+        pass
+
+    def draw(self, display):
+        try:
+            W, H = display.get_size()
+
+            dim = pygame.Surface((W, H), pygame.SRCALPHA)
+            dim.fill((0, 0, 0, self.bg_alpha))
+            display.blit(dim, (0, 0))
+
+            panel_rect = pygame.Rect(0, 0, self.panel_width, self.panel_height)
+            panel_rect.center = (W // 2, H // 2)
+            pygame.draw.rect(display, (30, 30, 30), panel_rect, border_radius=16)
+            pygame.draw.rect(display, (200, 200, 200), panel_rect, width=2, border_radius=16)
+
+            title_surf = self.font.render(self.title_text, True, (240, 240, 240))
+            title_rect = title_surf.get_rect(center=(panel_rect.centerx, panel_rect.top + 50))
+            display.blit(title_surf, title_rect)
+
+            padding = 28
+            col_gap = 24
+
+            left_rect = pygame.Rect(
+                panel_rect.left + padding,
+                title_rect.bottom + 20,
+                int(self.panel_width * 0.55),
+                panel_rect.bottom - (title_rect.bottom + 20) - padding
+            )
+            right_rect = pygame.Rect(
+                left_rect.right + col_gap,
+                left_rect.top,
+                panel_rect.right - padding - (left_rect.right + col_gap),
+                left_rect.height
+            )
+
+            inv_title = self.small_font.render("Inventário", True, (210, 210, 210))
+            display.blit(inv_title, (left_rect.x, left_rect.y))
+            y = left_rect.y + 30
+            for item in self.inventory_items:
+                line = f"- {item['nome']} x{item['qtd']}"
+                line_surf = self.small_font.render(line, True, (230, 230, 230))
+                display.blit(line_surf, (left_rect.x + 8, y))
+                y += 26
+
+            opt_title = self.small_font.render("Opções", True, (210, 210, 210))
+            display.blit(opt_title, (right_rect.x, right_rect.y))
+            y = right_rect.y + 36
+            for idx, opt in enumerate(self.options):
+                selected = (idx == self.selected)
+                color = BLUE_COLOR if selected else (100, 100, 100)
+                
+                # DEBUG: Exibir cor escolhida
+                print(f"[DEBUG] Opção: {opt} | Selecionada: {selected} | Cor: {color}")
+                
+                opt_surf = self.font.render(opt, True, color)
+                display.blit(opt_surf, (right_rect.x + 8, y))
+                if selected:
+                    arrow = self.font.render("▶", True, color)
+                    display.blit(arrow, (right_rect.x - 36, y))
+                y += 48
+    
+        except Exception:
+            import traceback; traceback.print_exc()
+            # Se falhar, fecha o overlay para não matar o jogo
+            self.on_resume()        
+        
+        
 
 
 class Char(Obj):
@@ -136,14 +280,17 @@ class Map(Obj):
   
         
 class Ground(pygame.sprite.Sprite):
-    def __init__(self, x, y, width, height):
+    def __init__(self, x, y, width, height, debug=False):
         super().__init__()
-        self.image = pygame.Surface((width, height))
-        self.image.fill((0, 255, 0))  # Cor verde para o chão
-        self.rect = self.image.get_rect(topleft=(x, y))
+        # surface com alpha
+        self.image = pygame.Surface((width, height), pygame.SRCALPHA)
 
-    def draw(self, surface):
-        surface.blit(self.image, self.rect)  # Desenha a imagem do chão na tela
+        if debug:
+            # só se quiser ver o chão durante depuração:
+            pygame.draw.rect(self.image, (0, 255, 0), self.image.get_rect(), 2)
+        # se debug=False, fica totalmente invisível
+
+        self.rect = self.image.get_rect(topleft=(x, y))
 
 
 class Hud(Obj):
@@ -267,11 +414,11 @@ class BossHud(pygame.sprite.Sprite):
 class Shot(pygame.sprite.Sprite):
     """Classe para representar o projétil disparado pelo jogador."""
 
-    def __init__(self, x, y, direction, groups, size=(80, 25)):
+    def __init__(self, x, y, direction, groups, size=(80, 25), speed=5):
         super().__init__(groups)  # Adiciona o projétil ao(s) grupo(s) de sprites
         
         self.direction = direction  # Direção do disparo: 1 (direita), -1 (esquerda)
-        self.speed = 5  # Velocidade com que o projétil se move
+        self.speed = speed  # Velocidade com que o projétil se move
 
         # Carrega a imagem do projétil com transparência (alpha)
         image = pygame.image.load("assets/projectiles/Shot1.png").convert_alpha()
@@ -304,348 +451,624 @@ class Shot(pygame.sprite.Sprite):
 
 
 class Player(Obj):
-    """Classe para representar o jogador no jogo Guardiões de Pindorama."""
+    """
+    Guardiões de Pindorama — Player
 
-    def __init__(self, image_path, position, groups, size=(200, 200), life=100, lives=3, xp=0, has_hole=True):
+    Controles:
+      • A/D ou ←/→ : andar e VIRAR o personagem imediatamente
+      • S/↓ (segurar): agachar parado (down / c_idle)
+      • K: bloquear em pé (block)
+      • S/↓ + K: bloquear agachado (c_block)
+      • Q: atacar em pé (shot)
+      • S/↓ + Q (segurar Q): atacar agachado (c_shot); ao soltar Q, continua agachado
+      • SPACE: pular (se não estiver bloqueando/rolando)
+      • Left Shift: dash/roll (percorre EXATOS 200 px, com cooldown)
+    """
+
+    # -------------------------------
+    # Loader tolerante de sprites
+    # -------------------------------
+    def _load_seq_scaled(self, prefix: str, count: int, size=None,
+                         root="assets/charsSprite/player/indigenaM/"):
+        """
+        Carrega sequência prefix0..prefix{count-1} (ex.: R_D0.png).
+        Se não achar, tenta arquivo único prefix.png (ex.: R_D.png).
+        Também tenta variação sem underscore (R_D -> RD). Retorna ≥1 frame.
+        """
+        size = size or self.size
+        frames = []
+
+        # 1) tenta sequência
+        for i in range(count):
+            found = None
+            for pf in (prefix, prefix.replace("_", "")):
+                for ext in (".png", ".PNG"):
+                    path = os.path.join(root, f"{pf}{i}{ext}")
+                    if os.path.exists(path):
+                        found = path
+                        break
+                if found:
+                    break
+            if not found:
+                if i == 0:
+                    frames = []
+                break
+            img = pygame.image.load(found).convert_alpha()
+            frames.append(pygame.transform.scale(img, size))
+
+        if frames:
+            return frames
+
+        # 2) tenta arquivo único
+        for pf in (prefix, prefix.replace("_", "")):
+            for ext in (".png", ".PNG"):
+                one = os.path.join(root, f"{pf}{ext}")
+                if os.path.exists(one):
+                    img = pygame.image.load(one).convert_alpha()
+                    return [pygame.transform.scale(img, size)]
+
+        # 3) falhou: relata tentativas
+        tried = []
+        for pf in (prefix, prefix.replace("_", "")):
+            for ext in (".png", ".PNG"):
+                tried.append(os.path.join(root, f"{pf}{ext}"))
+                tried.append(os.path.join(root, f"{pf}0{ext}"))
+        raise FileNotFoundError(f"Nenhuma imagem encontrada para '{prefix}'. Tentativas: {tried}")
+
+    # --------------------------------------
+    # Lazy-load para animações específicas
+    # --------------------------------------
+    def _ensure_anim(self, key: str, prefix: str, count: int):
+        """Carrega self.animations[key] se ainda não estiver carregada."""
+        if key not in self.animations or not self.animations[key]:
+            self.animations[key] = self._load_seq_scaled(prefix, count)
+
+    # --------------------------------------
+    # (Opcional) mover X respeitando limites
+    # --------------------------------------
+    def _move_x_with_limits(self, dx: int):
+        
+        if getattr(self, "exit_mode", False):
+            self.rect.x += dx
+            return
+        
+        """
+        Move no eixo X respeitando bordas de tela e (se aplicável) o lock do buraco.
+        Usado no dash para não sair da tela/atravessar limites.
+        """
+        
+        
+        screen_width = 1280
+        buffer = 75
+        next_x = self.rect.x + dx
+
+        if self.in_hole and self.fall_lock_x_range:
+            left, right = self.fall_lock_x_range
+            next_x = max(left, min(next_x, right - self.rect.width))
+            self.rect.x = next_x
+            return
+
+        if dx > 0:
+            if next_x + self.rect.width - buffer < screen_width:
+                self.rect.x = next_x
+        else:
+            if next_x + buffer > 0:
+                self.rect.x = next_x
+
+    # -------------------------------
+    # Construção / estado inicial
+    # -------------------------------
+    def __init__(self, image_path, position, groups, size=(200, 200),
+                 life=100, lives=3, xp=0, has_hole=True):
         super().__init__(image_path, position, groups, size)
-        self.image_path = image_path  # Salva o caminho da imagem para referência futura
+
+        # Atributos gerais
+        self.image_path = image_path
         self.life = life
         self.lives = lives
         self.xp = xp
         self.size = size
-        self.has_hole = has_hole  # <- NOVA PROPRIEDADE
-        self.original_image = pygame.image.load("assets/charsSprite/player/indigenaM/R0.png").convert_alpha()
+        self.has_hole = has_hole
+
+        # Sprite inicial (idle frame 0)
+        self.original_image = pygame.image.load(
+            "assets/charsSprite/player/indigenaM/R0.png"
+        ).convert_alpha()
         self.image = pygame.transform.scale(self.original_image, size)
         self.rect = self.image.get_rect(topleft=position)
+
+        # Mundo/física
         self.in_hole = False
+        self.fall_lock_x_range = None
         self.facing_right = True
         self.is_dead = False
-        self.fall_lock_x_range = None  # Guarda o intervalo do buraco
 
         self.vel = 5
         self.grav = 0.5
-        self.jump_power = -15  # Velocidade inicial para o pulo
-        self.is_jumping = False  # Verifica se está pulando
-        self.on_ground = False  # Verifica se está no chão
+        self.jump_power = -15
+        self.is_jumping = False
+        self.on_ground = False
 
-        # Flags de direção e estado de movimento
+        # Inputs horizontais
         self.right = False
-        self.left = False
-        self.shots = pygame.sprite.Group()  # Grupo para armazenar os projéteis disparados
-        self.shot_released = False  # Controla se já disparou a flecha neste ciclo
-        self.current_frame = 0  # Controle do quadro atual da animação
-        self.animation_speed = 5  # Velocidade de animação (controle de quadro)
+        self.left  = False
+
+        # Estados avançados
+        self.crouching = False
+        self.blocking  = False
+        self.rolling   = False
+        self.invulnerable = False
+
+        # DASH/ROLL — distância exata + cooldown
+        self.roll_key = pygame.K_LSHIFT
+        self.roll_duration_ms = 350         # duração do dash
+        self.roll_distance_px = 200         # DISTÂNCIA EXATA
+        self.roll_cooldown_ms = 450         # cooldown entre dashes
+        self.roll_timer = 0
+        self._last_tick_ms = 0
+        self._last_roll_end_ms = -9999
+        self._roll_acc_px = 0.0             # acumula subpixels por frame
+        self.roll_moved_px = 0.0            # quanto já percorreu no dash atual
+
+        # Disparos/anim
+        self.shots = pygame.sprite.Group()
+        self.shot_released = False
+        self.current_frame = 0
+        self.animation_speed = 5
         self.ticks = 0
         self.img = 0
 
-        # Definindo as animações (idle, walk, shot, jump)
+        # Offsets e velocidades do tiro por postura
+        self.shot_offsets = {
+            "stand":  {"right": (80, 60), "left": (30, 60)},
+            "crouch": {"right": (70, 105), "left": (20, 90)},
+        }
+        self.shot_speed = {"stand": 7, "crouch": 6}
+
+        # -------------------------------
+        # Registro de animações
+        # -------------------------------
         self.animations = {
             "idle": [
-                pygame.transform.scale(pygame.image.load(f"assets/charsSprite/player/indigenaM/R0.png"), size),
-                pygame.transform.scale(pygame.image.load(f"assets/charsSprite/player/indigenaM/R1.png"), size)
+                pygame.transform.scale(pygame.image.load(
+                    "assets/charsSprite/player/indigenaM/R0.png"), size),
+                pygame.transform.scale(pygame.image.load(
+                    "assets/charsSprite/player/indigenaM/R1.png"), size),
             ],
-            "walk": [
-                pygame.transform.scale(pygame.image.load(f"assets/charsSprite/player/indigenaM/M{i}.png"), size)
-                for i in range(8)
-            ],
-            "shot": [
-                pygame.transform.scale(pygame.image.load(f"assets/charsSprite/player/indigenaM/S{i}.png"), size)
-                for i in range(7)
-            ],
-            "jump": [
-                pygame.transform.scale(pygame.image.load(f"assets/charsSprite/player/indigenaM/J{i}.png"), size)
-                for i in range(17)
-            ],            
+            "walk": [pygame.transform.scale(
+                pygame.image.load(f"assets/charsSprite/player/indigenaM/M{i}.png"), size)
+                for i in range(8)],
+            "shot": self._load_seq_scaled("S", 7),
+            "jump": self._load_seq_scaled("J", 17),
+
+            # c_idle será carregada on-demand ao agachar
+            "c_idle": [],
+
+            # Bloqueio (em pé/abaixado) — normalmente 1 frame; aceita sequência se existir
+            "block":   self._load_seq_scaled("B_U", 1),
+            "c_block": self._load_seq_scaled("B_D", 1),
+
+            # Ataque agachado (aceita S_D0.. ou S_D.png)
+            "c_shot": self._load_seq_scaled("S_D", 7),
+
+            # Placeholders (trocar quando tiver sprites dedicados)
+            "roll": [pygame.transform.scale(
+                pygame.image.load("assets/charsSprite/player/indigenaM/B_D.png"), size)],
+            "dead": [pygame.transform.scale(
+                pygame.image.load("assets/charsSprite/player/indigenaM/B_D.png"), size)],
         }
 
-        # Animações espelhadas para esquerda
-        self.animations["shot_left"] = [pygame.transform.flip(img, True, False) for img in self.animations["shot"]]
+        # Espelhadas (listas prontas para left/right)
+        self.animations["shot_left"]  = [pygame.transform.flip(img, True, False)
+                                         for img in self.animations["shot"]]
         self.animations["shot_right"] = self.animations["shot"]
-        
-        # Animações espelhadas para pulo
-        self.animations["jump_left"] = [pygame.transform.flip(img, True, False) for img in self.animations["jump"]]
+        self.animations["jump_left"]  = [pygame.transform.flip(img, True, False)
+                                         for img in self.animations["jump"]]
         self.animations["jump_right"] = self.animations["jump"]
+        self.animations["c_shot_left"]  = [pygame.transform.flip(img, True, False)
+                                           for img in self.animations["c_shot"]]
+        self.animations["c_shot_right"] = self.animations["c_shot"]
 
-        # Definindo o estado inicial
+        # Alias do agachado parado (preenchido no 1º agachamento)
+        self.animations["down"] = []
+
+        # Estados que NÃO têm variantes left/right (flipamos manualmente)
+        self._dirless = {"idle", "walk", "down", "block", "c_block", "roll", "dead"}
+
+        # Estado inicial
         self.state = "idle"
-        self.image = self.animations[self.state][self.current_frame]  # Primeira Imagem
-        self.rect = self.image.get_rect(topleft=position)  # Posição Inicial do jogador
-        self.lives = lives  # Número de vidas (live)
-        self.life = life  # Pontos de Vida (Zerou os pontos, perdeu uma Vida = Live)
-        self.xp = 0  # Adicione esta linha para inicializar o XP
-        self.gold = 0  # Exemplo de ouro
-        self.dialog_active = False  # Flag para indicar se o diálogo está ativo
-        self.dialog_npc = None  # Referência ao NPC com o qual está dialogando
-    
+        self.image = self.animations[self.state][self.current_frame]
+        self.rect  = self.image.get_rect(topleft=position)
+
+        # Outros
+        self.gold = 0
+        self.dialog_active = False
+        self.dialog_npc = None
+
+    # -------------------------------
+    # Utilitário de cooldown do roll
+    # -------------------------------
+    def _roll_ready(self) -> bool:
+        return pygame.time.get_ticks() - self._last_roll_end_ms >= self.roll_cooldown_ms
+
+    # -------------------------------
+    # Ciclo por frame
+    # -------------------------------
     def update(self):
-        """Atualiza o estado do jogador em cada quadro."""
-        super().update()  # Chama o método da classe pai
-        self.gravity()  # Aplica a gravidade
-                        
-        # Se o personagem estiver no buraco, desabilita o movimento
-        # if self.in_hole:
-        #     self.right = False
-        #     self.left = False
+        super().update()
+        self.gravity()
 
-        # Se o personagem está atacando, ele não pode se mover
-        if self.state != "shot":  # Só permite movimentação se não estiver atacando
-            self.movements()  # Atualiza os movimentos laterais
-        
-        # Lógica para disparar o projétil
-        self.shots.update()  # Atualiza todos os projéteis disparados
+        # Movimenta apenas se não estiver em um estado “ocupado”
+        busy = self.state in ("shot", "c_shot", "block", "c_block", "roll", "dead") or self.blocking
+        if not busy:
+            self.movements()
 
-        # Animação baseada no estado do personagem
+        # Atualiza projéteis
+        self.shots.update()
+
+        # ---- Bloqueio: anima mesmo sem movements() ----
+        if self.blocking:
+            self.state = "c_block" if self.crouching else "block"
+            self.animate(self.state, 80, 1)
+
+        # ---- Ataques (em pé / agachado) ----
         if self.state == "shot":
-            direction_anim = "shot_right" if self.facing_right else "shot_left"
-            self.animate(direction_anim, 25, 7)
-                        
-        # Lógica de movimento e atualização
-        if self.is_dead:
-            return  # Se o personagem está morto, não faz mais nada
+            self.animate("shot_right" if self.facing_right else "shot_left", 25, 7)
+        if self.state == "c_shot":
+            self.animate("c_shot_right" if self.facing_right else "c_shot_left", 25, 7)
 
-        # Verifica se o jogador está no diálogo
+        # ---- Garante agachado parado mesmo se movements() não rodar neste frame ----
+        if (self.crouching and not self.left and not self.right
+            and not self.is_jumping and not self.blocking
+            and self.state not in ("shot", "c_shot", "roll", "dead")):
+
+            if not self.animations["c_idle"]:
+                self._ensure_anim("c_idle", "R_D", 1)
+                self.animations["down"] = self.animations["c_idle"]
+
+            self.state = "down"
+            frames_down = max(1, len(self.animations.get("down", [])))
+            self.animate("down", 100, frames_down)
+
+        # ---- ROLL/DASH: distância EXATA de 200 px, independente do FPS ----
+        if self.state == "roll":
+            now = pygame.time.get_ticks()
+            dt_ms = now - (self._last_tick_ms or now)
+            self._last_tick_ms = now
+            self.roll_timer += dt_ms
+
+            # velocidade (px/ms) p/ cobrir a distância no tempo alvo
+            speed_px_per_ms = self.roll_distance_px / max(1, self.roll_duration_ms)
+
+            # deslocamento sugerido neste frame (float)
+            step = speed_px_per_ms * dt_ms
+
+            # não ultrapassa a distância restante
+            remaining = self.roll_distance_px - self.roll_moved_px
+            step = min(step, max(0.0, remaining))
+
+            # acumula subpixel e aplica a parte inteira
+            self._roll_acc_px += step
+            apply_px = int(self._roll_acc_px)
+            self._roll_acc_px -= apply_px
+
+            if apply_px > 0:
+                dx = apply_px if self.facing_right else -apply_px
+                self._move_x_with_limits(dx)
+                self.roll_moved_px += abs(apply_px)
+
+            # anima roll (placeholder até ter sprites)
+            self.animate("roll", 10, max(1, len(self.animations["roll"])))
+
+            # encerra: completou distância ou estourou tempo (fallback)
+            if self.roll_moved_px >= self.roll_distance_px or self.roll_timer >= self.roll_duration_ms:
+                self.rolling = False
+                self.invulnerable = False
+                self.state = "idle"
+                self.roll_timer = 0
+                self._last_roll_end_ms = pygame.time.get_ticks()
+                self._roll_acc_px = 0.0
+                self.roll_moved_px = 0.0
+
+        # ---- Morte ----
+        if self.is_dead or self.state == "dead":
+            self.is_dead = True
+            self.animate("dead", 12, max(1, len(self.animations["dead"])))
+            return
+
+        # ---- Diálogo trava ações ----
         if self.dialog_active:
-            return  # Se o diálogo estiver ativo, o jogador não pode se mover   
+            return
 
-        if self.check_death():  # Chama a função check_death
+        # ---- Queda fatal / respawn ----
+        if self.check_death():
             if self.lives <= 0:
-                self.die()  # Chama o método de morte se as vidas acabaram
+                self.die()
 
+    # -------------------------------
+    # Física vertical
+    # -------------------------------
     def gravity(self):
-        """Aplica a gravidade ao jogador, verifica se caiu em buracos e trata colisão com o chão."""
-
-        # Aplica gravidade
         self.vel += self.grav
         self.rect.y += self.vel
 
-        # ⚠️ Verifica se há buracos definidos pela fase
+        # buracos da fase
         if hasattr(self, "holes"):
             for hole_rect in self.holes:
-                # Se o centro inferior do jogador entra no buraco
                 if hole_rect.collidepoint(self.rect.centerx, self.rect.bottom):
                     if not self.in_hole:
                         print("[DEBUG] Entrou no buraco!")
-                        self.in_hole = True  # Marca que o jogador está caindo
-                        self.fall_lock_x_range = (hole_rect.left, hole_rect.right)  # Salva os limites do buraco
-                    break  # Não precisa verificar outros buracos
+                        self.in_hole = True
+                        self.fall_lock_x_range = (hole_rect.left, hole_rect.right)
+                    break
 
-        # 🧊 Limita a velocidade de queda
+        # clamp de queda
         if self.vel >= 10:
             self.vel = 10
 
-        # ✅ Só verifica colisão com o chão se NÃO estiver caindo em buraco
+        # colide com o chão se não estiver caindo no buraco
         if not self.in_hole:
             if self.rect.y >= GROUND_LEVEL - self.rect.height:
                 self.rect.y = GROUND_LEVEL - self.rect.height
                 self.vel = 0
                 self.on_ground = True
                 self.is_jumping = False
-                
+
     def set_holes(self, hole_list):
-        """Recebe uma lista de buracos (como retângulos) vindos da fase atual."""
         self.holes = hole_list
-            
+
+    # -------------------------------
+    # Entrada de teclado
+    # -------------------------------
     def events(self, events):
-        """Processa eventos de teclado para controlar o jogador."""
         if events.type == pygame.KEYDOWN:
-            if events.key == pygame.K_d or events.key == pygame.K_RIGHT:
+            pressed = pygame.key.get_pressed()
+            crouch_mod = pressed[pygame.K_s] or pressed[pygame.K_DOWN]
+
+            if events.key in (pygame.K_d, pygame.K_RIGHT):
                 self.right = True
-            elif events.key == pygame.K_a or events.key == pygame.K_LEFT:
+                self.facing_right = True     # Vira imediatamente p/ direita
+
+            elif events.key in (pygame.K_a, pygame.K_LEFT):
                 self.left = True
-            elif events.key == pygame.K_SPACE and self.on_ground:  # Verifica se está no chão antes de pular
-                self.vel = self.jump_power  # Faz o jogador pular
-                self.on_ground = False  # Marca como não está mais no chão
-                self.is_jumping = True
-                self.state = "jump"
-                
-            elif events.key == pygame.K_q:  # Tecla "Q" para disparar
-                self.shot()  # Dispara o projétil
-                self.state = "shot"  # Altera o estado para "shot" (disparo)
-                    
-            elif events.key == pygame.K_e:  # Tecla de ação para iniciar o diálogo
-                if self.dialog_npc:  # Verifica se o jogador está perto de um NPC
+                self.facing_right = False    # Vira imediatamente p/ esquerda
+
+            elif events.key in (pygame.K_s, pygame.K_DOWN):
+                self.crouching = True
+                if not self.animations["c_idle"]:
+                    self._ensure_anim("c_idle", "R_D", 1)
+                    self.animations["down"] = self.animations["c_idle"]
+                self.state = "c_block" if self.blocking else "down"
+
+            elif events.key == pygame.K_k:
+                self.blocking = True
+                self.state = "c_block" if (crouch_mod or self.crouching) else "block"
+
+            elif events.key == self.roll_key:
+                if not self.rolling and not self.blocking and self._roll_ready():
+                    self.rolling = True
+                    self.invulnerable = True
+                    self.roll_timer = 0
+                    self._last_tick_ms = pygame.time.get_ticks()
+                    self.state = "roll"
+                    self.img = 0
+                    self.ticks = 0
+                    self._roll_acc_px = 0.0
+                    self.roll_moved_px = 0.0
+
+            elif events.key == pygame.K_SPACE:
+                if self.on_ground and not self.blocking and not self.rolling:
+                    self.vel = self.jump_power
+                    self.on_ground = False
+                    self.is_jumping = True
+                    self.state = "jump"
+
+            elif events.key == pygame.K_q:
+                if self.blocking:
+                    return  # opcional: impedir ataque durante bloqueio
+                if crouch_mod or self.crouching:
+                    self.state = "c_shot"
+                else:
+                    self.state = "shot"
+                self.shot()
+
+            elif events.key == pygame.K_e:
+                if self.dialog_npc:
                     self.start_dialogue(self.dialog_npc)
-            
+
         elif events.type == pygame.KEYUP:
-            if events.key == pygame.K_d or events.key == pygame.K_RIGHT:
+            if events.key in (pygame.K_d, pygame.K_RIGHT):
                 self.right = False
-            elif events.key == pygame.K_a or events.key == pygame.K_LEFT:
+            elif events.key in (pygame.K_a, pygame.K_LEFT):
                 self.left = False
-            elif events.key == pygame.K_q:  # Quando a tecla "Q" for solta, o jogador volta para o estado "idle"
-                self.state = "idle"  # Retorna ao estado "idle" (sem disparo)
-  
-    def shot(self):
-        """Dispara um projétil na direção do jogador e inicia a animação de ataque."""
-        # Inicia a animação de "shot" no jogador
-        self.state = "shot"  # Define o estado como "shot"
-        self.current_frame = 0  # Reseta o quadro da animação
+            elif events.key in (pygame.K_s, pygame.K_DOWN):
+                self.crouching = False
+                self.state = "block" if self.blocking else "idle"
+            elif events.key == pygame.K_k:
+                self.blocking = False
+                if self.state.startswith("block"):
+                    self.state = "idle"
+            elif events.key == pygame.K_q:
+                # Soltou Q: se ainda agachado, volta para down; senão, idle
+                if self.crouching:
+                    self.state = "down"
+                else:
+                    self.state = "idle"
 
-        # Atualiza a animação de disparo
-        self.animate("shot", 25, 6)  # Chama animação de disparo
-        
-        self.shot_released = False  # Permite um novo disparo na nova animação
-        
-    def real_shot(self):
-        """Dispara o projétil sincronizado com o frame da animação."""
-        shot_y = self.rect.y + 60  # Ajuste fino conforme sprite
-        if self.facing_right:
-            shot_x = self.rect.x + 80  # Ajuste fino para a mão direita (experimente 130~150)
-            shot = Shot(shot_x, shot_y, 1, self.shots, size=(80, 25))
-        else:
-            shot_x = self.rect.x + 30  # Ajuste fino para a mão esquerda (experimente 20~40)
-            shot = Shot(shot_x, shot_y, -1, self.shots, size=(80, 25))
-        self.shots.add(shot)
-    
-    def start_dialogue(self, npc):
-        """Inicia o diálogo com o NPC."""
-        self.dialog_active = True  # Ativa o diálogo
-        print(f"{npc.__class__.__name__}: Bem-vindo, jovem guerreiro! O que procura?")
-        # Aqui você pode adicionar mais lógicas para o diálogo, como exibir opções ou continuar com missões.
-        # Durante o diálogo, o jogador não poderá se mover:
-        self.is_moving = False  # Desativa o movimento do jogador
-
-    def stop_dialogue(self):
-        """Interrompe o diálogo."""
-        self.dialog_active = False  # Desativa o diálogo
-        self.is_moving = True  # Ativa novamente o movimento do jogador
-        print("Diálogo finalizado.")            
-    
+    # -------------------------------
+    # Movimentação lateral
+    # -------------------------------
     def movements(self):
-        """Atualiza os movimentos laterais e a animação do jogador."""
-        # Limite da tela (ajuste conforme o tamanho da tela)
-        screen_width = 1280  # Largura da tela
-        buffer = 75  # Permite ultrapassar 75px para fora dos limites da tela
+        screen_width = 1280
+        buffer = 75
 
-        # Se o personagem está disparando (estado "shot")
-        if self.state == "shot":
-            # Define a direção do disparo e aplica a animação de disparo
-            if self.facing_right:
-                self.animate("shot_right", 25, 6)  # Animação de disparo para direita
-            else:
-                self.animate("shot-left", 25, 6)  # Animação de disparo para esquerda (pode usar uma animação específica para esquerda, se necessário)
-            
-            # Não altera a rotação da imagem durante o disparo
-            # Não precisamos alterar a imagem aqui, pois a rotação é tratada fora dessa parte
-            return  # Retorna, pois não precisamos fazer mais nada enquanto dispara
-        
-        # Movimento para a direita
+        # não anda em estados “ocupados”
+        if self.state in ("shot", "c_shot", "block", "c_block", "roll", "dead") or self.blocking:
+            return
+
+        # agachado parado (idle agachado)
+        if self.crouching and not self.left and not self.right and not self.is_jumping:
+            if not self.animations["down"]:
+                self._ensure_anim("c_idle", "R_D", 1)
+                self.animations["down"] = self.animations["c_idle"]
+            self.state = "down"
+            frames_down = max(1, len(self.animations.get("down", [])))
+            self.animate("down", 100, frames_down)
+            return
+
+        # andar para a direita
         if self.right:
             next_x = self.rect.x + 2.8
-            
+
             if self.in_hole:
-                # Só permite movimento para a direita dentro do buraco
                 if self.fall_lock_x_range and next_x + self.rect.width <= self.fall_lock_x_range[1]:
                     self.rect.x = next_x
             else:
-                if next_x + self.rect.width - buffer < screen_width:
+                if getattr(self, "exit_mode", False):
+                    # saída liberada: não aplica buffer, deixa atravessar
                     self.rect.x = next_x
-            
-            # Permite ultrapassar 75px além da borda direita
-            if self.rect.x + self.rect.width - buffer < screen_width:
-                self.facing_right = True  # Atualiza a direção para a direita
-            self.state = "walk"  # Altera o estado para "walk"
-            self.animate("walk", 15, 7)  # Chama animação de caminhada para direita
+                else:
+                    if next_x + self.rect.width - buffer < screen_width:
+                        self.rect.x = next_x
 
-        # Movimento para a esquerda
+            if self.rect.x + self.rect.width - buffer < screen_width:
+                self.facing_right = True
+
+            self.state = "walk"
+            self.animate("walk", 15, 7)
+
+        # andar para a esquerda
         elif self.left:
             next_x = self.rect.x - 2.8
-            
             if self.in_hole:
-                # Só permite movimento para a esquerda dentro do buraco
                 if self.fall_lock_x_range and next_x >= self.fall_lock_x_range[0]:
                     self.rect.x = next_x
             else:
                 if next_x + buffer > 0:
                     self.rect.x = next_x
-                        
-            # Permite ultrapassar 75px além da borda esquerda
             if self.rect.x + buffer > 0:
-                self.facing_right = False  # Atualiza a direção para a esquerda
-            self.state = "walk"  # Altera o estado para "walk"
-            self.animate("walk", 15, 7)  # Chama animação de caminhada para esquerda
+                self.facing_right = False
+            self.state = "walk"
+            self.animate("walk", 15, 7)
 
-        # Caso contrário, animação de espera (idle)
+        # parado em pé
         else:
-            self.state = "idle"  # Altera o estado para "idle"
-            self.animate("idle", 100, 1)  # Animação de espera (idle)
+            self.state = "idle"
+            self.animate("idle", 100, 1)
 
-        # Agora, aplica a rotação da imagem com base na direção (movimento ou idle)
-        if self.facing_right:
-            self.image = pygame.transform.flip(self.image, False, False)  # Direção direita
-        else:
-            self.image = pygame.transform.flip(self.image, True, False)  # Direção esquerda
-
-        # Animação de Pulo
+        # pulo (jump já tem listas esquerda/direita)
         if self.is_jumping:
             direction_anim = "jump_right" if self.facing_right else "jump_left"
             self.animate(direction_anim, 50, 17)
 
+    # -------------------------------
+    # Animação + gatilhos
+    # -------------------------------
     def animate(self, name, ticks, limit):
-        """Anima o personagem com uma sequência de imagens."""
-        self.ticks += 1  # Incrementa o contador de ticks
-
-        # Controla a troca de frames com base no número de ticks
+        # avanço de frame por “ticks”
+        self.ticks += 1
         if self.ticks >= ticks:
-            self.ticks = 0  # Reseta o contador de ticks
-            self.img += 1  # Avança para o próximo quadro da animação
+            self.ticks = 0
+            self.img += 1
 
-        # Verifique o número de quadros disponíveis para a animação atual
-        frames = self.animations.get(name, [])  # Obtém os frames da animação
+        frames = self.animations.get(name, [])
         num_frames = len(frames)
-
-        # Se a animação não tiver quadros, não faz nada
         if num_frames == 0:
             return
 
-        # Reseta para o primeiro quadro se chegar ao final
         if self.img >= num_frames:
             self.img = 0
 
-        # Atualiza a imagem do personagem com o novo quadro da animação
+        # aplica quadro
         self.image = frames[self.img]
-        self.rect = self.image.get_rect(topleft=self.rect.topleft)  # Atualiza a posição do sprite
+        self.rect = self.image.get_rect(topleft=self.rect.topleft)
 
-        # Verifica se está na animação de disparo e no frame S4 (índice 4)
-        if name.startswith("shot") and self.img == 4 and not self.shot_released:
-            self.real_shot()  # Dispara a flecha
-            self.shot_released = True  # Garante que só dispare uma vez neste ciclo
+        # dispara flecha no frame 4 em QUALQUER animação com "shot" no nome
+        if "shot" in name and self.img == 4 and not self.shot_released:
+            self.real_shot()
+            self.shot_released = True
 
-        # Reinicia o ciclo de disparo se chegar ao fim da animação
-        if self.img >= num_frames - 1 and name.startswith("shot"):
-            self.shot_released = False  # Permite novo disparo no próximo ciclo
+        # libera novo disparo ao fim do ciclo
+        if self.img >= num_frames - 1 and "shot" in name:
+            self.shot_released = False
 
+        # ---- FLIP CENTRALIZADO ----
+        # Só flipamos para animações que NÃO têm variação left/right própria
+        if name in self._dirless:
+            if not self.facing_right:
+                self.image = pygame.transform.flip(self.image, True, False)
 
+    # -------------------------------
+    # Tiro
+    # -------------------------------
+    def shot(self):
+        """Inicia animação de ataque (o spawn real ocorre no frame 4 em animate)."""
+        self.current_frame = 0
+        if self.state == "c_shot":
+            self.animate("c_shot", 25, 6)
+        else:
+            self.animate("shot", 25, 6)
+        self.shot_released = False
+
+    def real_shot(self):
+        """Instancia o projétil com offsets/velocidade por postura."""
+        stance = "crouch" if (self.crouching or self.state == "c_shot") else "stand"
+        side = "right" if self.facing_right else "left"
+        dx, dy = self.shot_offsets[stance][side]
+        speed = self.shot_speed.get(stance, 7)
+
+        shot_x = self.rect.x + dx
+        shot_y = self.rect.y + dy
+        direction = 1 if self.facing_right else -1
+
+        shot = Shot(shot_x, shot_y, direction, self.shots, size=(80, 25), speed=speed)
+        self.shots.add(shot)
+
+    # -------------------------------
+    # Diálogo
+    # -------------------------------
+    def start_dialogue(self, npc):
+        self.dialog_active = True
+        print(f"{npc.__class__.__name__}: Bem-vindo, jovem guerreiro! O que procura?")
+        self.is_moving = False
+
+    def stop_dialogue(self):
+        self.dialog_active = False
+        self.is_moving = True
+        print("Diálogo finalizado.")
+
+    # -------------------------------
+    # Vida / morte
+    # -------------------------------
     def check_death(self):
-        """Verifica se o jogador passou da base da tela e trata a perda de vida."""
-        
-        # Só morre quando passa da base da tela
+        # morte ao cair além da base
         if self.rect.y > BASE_HEIGHT:
             self.lives -= 1
             print(f"[DEBUG] Morreu. Vidas restantes: {self.lives}")
             if self.lives > 0:
-                # Reposiciona em local seguro
+                # respawn
                 self.rect.x, self.rect.y = 100, 250
                 self.vel = 0
                 self.on_ground = False
                 self.is_jumping = False
-                self.in_hole = False  # Libera para próxima queda
+                self.in_hole = False
+                self.state = "idle"
                 return True
             else:
                 self.die()
                 return False
-
-        # Não morreu ainda
         return False
-    
+
     def lose_life(self):
-        """Chama a função para perder uma vida."""
-        self.lives -= 1  # Diminui a quantidade de vidas
+        self.lives -= 1
         if self.lives <= 0:
-            self.die()  # Se não tiver mais vidas, chama a função de morte
-    
+            self.die()
+
     def die(self):
-        """Define o estado do personagem como morto."""
         self.is_dead = True
+        self.state = "dead"
+        self.img = 0
+        self.ticks = 0
 
          
 class NPC_Cacique(Obj):
@@ -722,7 +1145,7 @@ class Boss_Mapinguari(Obj):
         self.state = "idle"
         self.current_frame = 0
         self.ticks = 0
-        self.animation_speed = 40
+        self.animation_speed = 60
 
         # Carrega animações
         self.animations = {"idle": []}
